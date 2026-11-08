@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uhiddename/reloc/internal/app"
+	"github.com/uhiddename/reloc/internal/config"
 	"github.com/uhiddename/reloc/internal/store"
 	"github.com/uhiddename/reloc/migrations"
 )
@@ -70,7 +71,11 @@ func run(ctx context.Context, args []string) error {
 			strings.Join(args[:min(2, len(args))], " "),
 		)
 	}
-	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	cfg, err := config.LoadPostgres()
+	if err != nil {
+		return err
+	}
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return err
 	}

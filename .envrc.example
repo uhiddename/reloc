@@ -1,3 +1,25 @@
-export DATABASE_URL='postgres://reloc@localhost/reloc?sslmode=disable&timezone=UTC'
-export RELOCD_TOKEN='generate with: openssl rand -hex 32'
-export RELOCD_SSH_KEY="$HOME/.config/reloc/deploy_key"
+# Secrets live in files, the `*_FILE` variables below only point to them.
+# Create the files once, readable only by you:
+#
+#   (umask 077 && mkdir -p "$HOME/.config/reloc")
+#   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/postgres_password")
+#   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/relocd_token")
+#   ssh-keygen -t ed25519 -N '' -C relocd -f "$HOME/.config/reloc/relocd_ssh_key"
+#
+# Then set the generated password for the database user. psql reads the file
+# itself, so the password stays out of shell history and process arguments;
+# it asks for the current password to connect:
+#
+#   psql "$POSTGRES_DSN" <<'SQL'
+#   \set pw `cat "$HOME/.config/reloc/postgres_password"`
+#   ALTER USER reloc PASSWORD :'pw';
+#   SQL
+
+# postgres
+export POSTGRES_DSN='postgres://reloc@localhost:5432/reloc?sslmode=disable'
+export POSTGRES_PASSWORD_FILE="$HOME/.config/reloc/postgres_password"
+
+# relocd
+export RELOCD_ADDR='127.0.0.1:8080'
+export RELOCD_TOKEN_FILE="$HOME/.config/reloc/relocd_token"
+export RELOCD_SSH_KEY_FILE="$HOME/.config/reloc/relocd_ssh_key"

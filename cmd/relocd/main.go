@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,13 +14,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uhiddename/reloc/internal/api"
 	"github.com/uhiddename/reloc/internal/app"
+	"github.com/uhiddename/reloc/internal/config"
 	"github.com/uhiddename/reloc/internal/remote"
 	"github.com/uhiddename/reloc/internal/store"
 )
 
 const (
-	defaultAddr = "127.0.0.1:8080"
-
 	// how long a client may take to send headers; without this limit
 	// a slow client holds its connection forever
 	readHeaderTimeout = 5 * time.Second
@@ -42,36 +40,32 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	token := os.Getenv("RELOCD_TOKEN")
-	if token == "" {
-		return errors.New("RELOCD_TOKEN is not set")
-	}
-	addr := os.Getenv("RELOCD_ADDR")
-	if addr == "" {
-		addr = defaultAddr
+	cfg, err := config.LoadRelocd()
+	if err != nil {
+		return err
 	}
 
-	pool, err := pgxpool.New(ctx, os.Getenv("DATABASE_URL"))
+	pool, err := pgxpool.NewWithConfig(ctx, cfg.Postgres)
 	if err != nil {
 		return err
 	}
 	defer pool.Close()
 
-	a, err := newApp(store.New(pool))
+	a, err := newApp(store.New(pool), cfg.SSHKeyPath)
 	if err != nil {
 		return err
 	}
 
 	srv := &http.Server{
-		Addr:              addr,
-		Handler:           api.New(a, token),
+		Addr:              cfg.Addr.String(),
+		Handler:           api.New(a, cfg.Token),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
 	// buffered: the goroutine must be able to exit if nobody reads the error
 	serveErr := make(chan error, 1)
 	go func() {
-		slog.Info("listening", "addr", addr)
+		slog.Info("listening", "addr", cfg.Addr.String())
 		serveErr <- srv.ListenAndServe()
 	}()
 
@@ -89,13 +83,12 @@ func run(ctx context.Context) error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-func newApp(st *store.Store) (*app.App, error) {
-	path := os.Getenv("RELOCD_SSH_KEY")
-	if path == "" {
-		slog.Warn("RELOCD_SSH_KEY is not set, applying configs is disabled")
+func newApp(st *store.Store, sshKeyPath string) (*app.App, error) {
+	if sshKeyPath == "" {
+		slog.Warn("no ssh key configured, applying configs is disabled")
 		return app.New(st), nil
 	}
-	auth, err := remote.KeyFileAuth(path)
+	auth, err := remote.KeyFileAuth(sshKeyPath)
 	if err != nil {
 		return nil, err
 	}
