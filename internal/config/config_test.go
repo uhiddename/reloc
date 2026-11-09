@@ -84,8 +84,8 @@ func TestSecretFileErrors(t *testing.T) {
 // setPostgres sets a valid database configuration with the given password.
 func setPostgres(t *testing.T, password string) {
 	t.Helper()
-	t.Setenv("POSTGRES_DSN", "postgres://reloc@db.example:5432/reloc?sslmode=disable")
-	t.Setenv("POSTGRES_PASSWORD_FILE", writeSecret(t, password))
+	t.Setenv("RELOC_PGDSN", "postgres://reloc@db.example:5432/reloc?sslmode=disable")
+	t.Setenv("RELOC_PGPASSWORD_FILE", writeSecret(t, password))
 	// pgx falls back to these, keep the tests independent of the machine
 	t.Setenv("PGPASSWORD", "")
 	t.Setenv("PGPASSFILE", filepath.Join(t.TempDir(), "no-pgpass"))
@@ -112,7 +112,7 @@ func TestLoadPostgres(t *testing.T) {
 
 func TestLoadPostgresFileWins(t *testing.T) {
 	setPostgres(t, "from-file")
-	t.Setenv("POSTGRES_DSN", "postgres://reloc:from-url@db.example/reloc?timezone=Europe/Berlin")
+	t.Setenv("RELOC_PGDSN", "postgres://reloc:from-url@db.example/reloc?timezone=Europe/Berlin")
 	t.Setenv("PGPASSWORD", "from-env")
 
 	cfg, err := LoadPostgres()
@@ -130,24 +130,24 @@ func TestLoadPostgresFileWins(t *testing.T) {
 func TestLoadPostgresErrors(t *testing.T) {
 	t.Run("dsn not set", func(t *testing.T) {
 		setPostgres(t, "pw")
-		t.Setenv("POSTGRES_DSN", "")
+		t.Setenv("RELOC_PGDSN", "")
 		_, err := LoadPostgres()
-		wantErr(t, err, "config: POSTGRES_DSN is not set")
+		wantErr(t, err, "config: RELOC_PGDSN is not set")
 	})
 	t.Run("bad dsn", func(t *testing.T) {
 		setPostgres(t, "pw")
-		t.Setenv("POSTGRES_DSN", "postgres://reloc:url-secret@db.example:notaport/reloc")
+		t.Setenv("RELOC_PGDSN", "postgres://reloc:url-secret@db.example:notaport/reloc")
 		_, err := LoadPostgres()
-		wantErr(t, err, "config: POSTGRES_DSN:")
+		wantErr(t, err, "config: RELOC_PGDSN:")
 		if err != nil && strings.Contains(err.Error(), "url-secret") {
 			t.Errorf("err reveals the password from the DSN: %v", err)
 		}
 	})
 	t.Run("password file not set", func(t *testing.T) {
 		setPostgres(t, "pw")
-		t.Setenv("POSTGRES_PASSWORD_FILE", "")
+		t.Setenv("RELOC_PGPASSWORD_FILE", "")
 		_, err := LoadPostgres()
-		wantErr(t, err, "config: POSTGRES_PASSWORD_FILE is not set")
+		wantErr(t, err, "config: RELOC_PGPASSWORD_FILE is not set")
 	})
 }
 
@@ -243,8 +243,8 @@ func TestLoadRelocdTokenRequired(t *testing.T) {
 
 // The session time zone must reach a real server, not only the config.
 func TestLoadPostgresSessionTimeZone(t *testing.T) {
-	if os.Getenv("POSTGRES_DSN") == "" {
-		t.Skip("POSTGRES_DSN is not set")
+	if os.Getenv("RELOC_PGDSN") == "" {
+		t.Skip("RELOC_PGDSN is not set")
 	}
 	cfg, err := LoadPostgres()
 	if err != nil {

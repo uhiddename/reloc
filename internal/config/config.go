@@ -1,11 +1,11 @@
 // Package config reads process configuration from environment variables.
 // It is the only place that knows their names:
 //
-//	POSTGRES_DSN            database connection string, without the password
-//	POSTGRES_PASSWORD_FILE  file with the database password
-//	RELOCD_ADDR             relocd listen address, ip:port
-//	RELOCD_TOKEN_FILE       file with the API token
-//	RELOCD_SSH_KEY_FILE     ssh key file; unset disables applying configs
+//	RELOC_PGDSN            database connection string, without the password
+//	RELOC_PGPASSWORD_FILE  file with the database password
+//	RELOCD_ADDR            relocd listen address, ip:port
+//	RELOCD_TOKEN_FILE      file with the API token
+//	RELOCD_SSH_KEY_FILE    ssh key file; unset disables applying configs
 package config
 
 import (
@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	envPostgresDSN          = "POSTGRES_DSN"
-	envPostgresPasswordFile = "POSTGRES_PASSWORD_FILE"
+	envPostgresDSN          = "RELOC_PGDSN"
+	envPostgresPasswordFile = "RELOC_PGPASSWORD_FILE"
 	envRelocdAddr           = "RELOCD_ADDR"
 	envRelocdTokenFile      = "RELOCD_TOKEN_FILE"
 	envRelocdSSHKeyFile     = "RELOCD_SSH_KEY_FILE"

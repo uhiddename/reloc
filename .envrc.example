@@ -10,16 +10,38 @@
 # itself, so the password stays out of shell history and process arguments;
 # it asks for the current password to connect:
 #
-#   psql "$POSTGRES_DSN" <<'SQL'
+#   psql "$RELOC_PGDSN" <<'SQL'
 #   \set pw `cat "$HOME/.config/reloc/postgres_password"`
 #   ALTER USER reloc PASSWORD :'pw';
 #   SQL
+#
+# psql can't read a bare password file, it needs the pgpass format. Build one
+# for both databases, the native one and the compose stack; after changing a
+# password, build it again:
+#
+#   (umask 077 && : "${RELOC_PGPORT:?}" "${RELOC_COMPOSE_PGPORT:?}" && {
+#     printf 'localhost:%s:reloc:reloc:%s\n' "$RELOC_PGPORT" "$(cat "$HOME/.config/reloc/postgres_password")"
+#     printf 'localhost:%s:reloc:reloc:%s\n' "$RELOC_COMPOSE_PGPORT" "$(cat "$HOME/.config/reloc/compose/postgres_password")"
+#   } > "$HOME/.config/reloc/pgpass")
 
 # postgres
-export POSTGRES_DSN='postgres://reloc@localhost:5432/reloc?sslmode=disable'
-export POSTGRES_PASSWORD_FILE="$HOME/.config/reloc/postgres_password"
+# The port of the native database, also used to build its pgpass line.
+export RELOC_PGPORT='5432'
+export RELOC_PGDSN="postgres://reloc@localhost:${RELOC_PGPORT}/reloc?sslmode=disable"
+export RELOC_PGPASSWORD_FILE="$HOME/.config/reloc/postgres_password"
+# For psql and other libpq tools: replaces ~/.pgpass inside the project, so
+# only this project's passwords are reachable here. relocd and reloc don't
+# use it, they read RELOC_PGPASSWORD_FILE.
+export PGPASSFILE="$HOME/.config/reloc/pgpass"
 
 # relocd
 export RELOCD_ADDR='127.0.0.1:8080'
 export RELOCD_TOKEN_FILE="$HOME/.config/reloc/relocd_token"
 export RELOCD_SSH_KEY_FILE="$HOME/.config/reloc/relocd_ssh_key"
+
+# compose.yaml
+# Host ports of the local stack.
+# relocd takes the port of RELOCD_ADDR, so the same URL reaches
+# whichever of the two is running; run only one at a time.
+export RELOC_COMPOSE_PGPORT='5433'
+export RELOCD_COMPOSE_PORT="${RELOCD_ADDR##*:}"

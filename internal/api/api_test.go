@@ -37,11 +37,11 @@ type testEnv struct {
 
 // newTestEnv connects to the database from the environment, see package
 // config, and applies migrations. Tests that use it are skipped when
-// POSTGRES_DSN is not set; any other configuration error fails them.
+// RELOC_PGDSN is not set; any other configuration error fails them.
 func newTestEnv(t *testing.T) testEnv {
 	t.Helper()
-	if os.Getenv("POSTGRES_DSN") == "" {
-		t.Skip("POSTGRES_DSN is not set")
+	if os.Getenv("RELOC_PGDSN") == "" {
+		t.Skip("RELOC_PGDSN is not set")
 	}
 	ctx := context.Background()
 
