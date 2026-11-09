@@ -1,0 +1,12 @@
+# An allowlist: everything stays out of the build context unless listed
+# here, so a new file (a dump, a key, a generated .conf) can't slip in.
+*
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!migrations/
+
+# Generated configs hold private keys; only test fixtures may go in.
+**/*.conf
+!internal/*/testdata/*.conf
