@@ -20,11 +20,12 @@ import (
 )
 
 const (
-	// how long a client may take to send headers; without this limit
-	// a slow client holds its connection forever
+	// how long-running requests get to finish on shutdown: longer than an
+	// apply, so a rollout doesn't cut one off halfway; keep stop_grace_period
+	// in compose.yaml above it
 	readHeaderTimeout = 5 * time.Second
 	// how long-running requests get to finish on shutdown
-	shutdownTimeout = 10 * time.Second
+	shutdownTimeout = api.ApplyTimeout + 5*time.Second
 )
 
 func main() {

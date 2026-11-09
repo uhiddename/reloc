@@ -9,8 +9,9 @@ import (
 	"github.com/uhiddename/reloc/internal/app"
 )
 
-// applyTimeout also limits how long a hung host can hold the server's lock.
-const applyTimeout = time.Minute
+// ApplyTimeout limits one apply, including how long a hung host can hold
+// the server's lock. relocd waits longer than this on shutdown.
+const ApplyTimeout = 15 * time.Second
 
 type server struct {
 	app *app.App
@@ -48,7 +49,7 @@ func (s *server) applyServer(w http.ResponseWriter, r *http.Request) {
 		writeBadRequest(w, err.Error())
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), applyTimeout)
+	ctx, cancel := context.WithTimeout(r.Context(), ApplyTimeout)
 	defer cancel()
 	action, err := s.app.ApplyServer(ctx, serverID)
 	if err != nil {
