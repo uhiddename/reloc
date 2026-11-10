@@ -265,3 +265,29 @@ func TestLoadPostgresSessionTimeZone(t *testing.T) {
 		t.Errorf("session timezone = %q, want UTC", tz)
 	}
 }
+
+// relocd probe runs with RELOCD_ADDR alone: nothing else may be required.
+func TestLoadRelocdAddrAlone(t *testing.T) {
+	for _, name := range []string{envPostgresDSN, envPostgresPasswordFile, envRelocdTokenFile, envRelocdSSHKeyFile} {
+		t.Setenv(name, "")
+	}
+	t.Setenv(envRelocdAddr, "0.0.0.0:8080")
+
+	addr, err := LoadRelocdAddr()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := netip.MustParseAddrPort("0.0.0.0:8080"); addr != want {
+		t.Errorf("addr = %v, want %v", addr, want)
+	}
+}
+
+func TestLoadRelocdAddrErrors(t *testing.T) {
+	t.Setenv(envRelocdAddr, "")
+	_, err := LoadRelocdAddr()
+	wantErr(t, err, "config: RELOCD_ADDR is not set")
+
+	t.Setenv(envRelocdAddr, "127.0.0.1:0")
+	_, err = LoadRelocdAddr()
+	wantErr(t, err, "config: RELOCD_ADDR: port must not be 0")
+}

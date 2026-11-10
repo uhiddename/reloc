@@ -20,6 +20,10 @@ import (
 )
 
 const (
+	usage = `usage:
+  relocd               serve the API
+  relocd probe livez   exit 0 if relocd at RELOCD_ADDR is live
+  relocd probe readyz  exit 0 if it is ready to serve requests`
 	// how long a client may take to send headers; without this limit
 	// a slow client holds its connection forever
 	readHeaderTimeout = 5 * time.Second
@@ -33,7 +37,19 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := run(ctx); err != nil {
+	var err error
+	switch args := os.Args[1:]; {
+	case len(args) == 0:
+		err = run(ctx)
+	case len(args) == 2 && args[0] == "probe" && (args[1] == "livez" || args[1] == "readyz"):
+		err = probe(ctx, "/"+args[1])
+	default:
+		_, _ = fmt.Fprintln(os.Stderr, usage)
+		stop()
+		// 2: a wrong invocation, unlike 1, which a healthcheck reads as unhealthy
+		os.Exit(2)
+	}
+	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "relocd:", err)
 		// os.Exit skips deferred calls
 		stop()

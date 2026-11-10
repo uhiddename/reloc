@@ -43,7 +43,7 @@ func LoadRelocd() (Relocd, error) {
 	if err != nil {
 		return Relocd{}, err
 	}
-	addr, err := listenAddr(envRelocdAddr)
+	addr, err := LoadRelocdAddr()
 	if err != nil {
 		return Relocd{}, err
 	}
@@ -53,6 +53,13 @@ func LoadRelocd() (Relocd, error) {
 		SSHKeyPath: os.Getenv(envRelocdSSHKeyFile),
 		Postgres:   pg,
 	}, nil
+}
+
+// LoadRelocdAddr reads only relocd's listen address. It is for commands
+// that talk to a running relocd, like its probe, and must not require the
+// token or the database.
+func LoadRelocdAddr() (netip.AddrPort, error) {
+	return listenAddr(envRelocdAddr)
 }
 
 // LoadPostgres parses the connection string and reads the password file.

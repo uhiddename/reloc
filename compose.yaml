@@ -51,6 +51,7 @@ services:
       interval: 2s
       timeout: 5s
       retries: 15
+    # noinspection ComposeUnknownValues
     ports:
       - "127.0.0.1:${RELOC_COMPOSE_PGPORT:?set it in .envrc}:5432"
 
@@ -86,9 +87,18 @@ services:
     secrets:
       - postgres_password
       - relocd_token
+    healthcheck:
+      # The image has no curl: relocd itself asks its /readyz. Timeouts line
+      # up: readyz pings the database for 1s, the probe waits 2s, docker 3s.
+      test: ["CMD", "relocd", "probe", "readyz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     # Longer than relocd's shutdown timeout, so a running apply finishes
     # before compose sends SIGKILL. Keep in sync with cmd/relocd/main.go.
     stop_grace_period: 25s
+    # noinspection ComposeUnknownValues
     ports:
       - "127.0.0.1:${RELOCD_COMPOSE_PORT:?set it in .envrc}:8080"
     depends_on:
