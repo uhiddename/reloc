@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/netip"
 	"os"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -144,5 +145,26 @@ func TestWithAuth(t *testing.T) {
 	}
 	if _, err := e.app.ApplyServer(ctx, -1); !errors.Is(err, ErrNoAuth) {
 		t.Errorf("original App: err = %v, want ErrNoAuth", err)
+	}
+}
+
+func TestPing(t *testing.T) {
+	e := newTestEnv(t)
+	if err := e.app.Ping(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPingUnreachable(t *testing.T) {
+	// nobody listens on port 1; pgxpool connects lazily, so New succeeds
+	db, err := pgxpool.New(context.Background(), "postgres://reloc@127.0.0.1:1/reloc?sslmode=disable&connect_timeout=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	err = New(store.New(db)).Ping(context.Background())
+	if err == nil || !strings.HasPrefix(err.Error(), "app: ping: store: ping: ") {
+		t.Fatalf("err = %v, want the app and store prefixes", err)
 	}
 }

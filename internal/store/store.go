@@ -1,7 +1,9 @@
 package store
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +24,14 @@ type Store struct {
 
 func New(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
+}
+
+// Ping checks that a connection can be acquired from the pool and used.
+func (s *Store) Ping(ctx context.Context) error {
+	if err := s.db.Ping(ctx); err != nil {
+		return fmt.Errorf("store: ping: %w", err)
+	}
+	return nil
 }
 
 func nilIfZero[T comparable](v T) any {

@@ -28,6 +28,13 @@ func (a *App) WithAuth(auth ssh.AuthMethod) *App {
 	return &App{store: a.store, auth: auth}
 }
 
+func (a *App) Ping(ctx context.Context) error {
+	if err := a.store.Ping(ctx); err != nil {
+		return fmt.Errorf("app: ping: %w", err)
+	}
+	return nil
+}
+
 func (a *App) GetHostByName(ctx context.Context, name string) (vpn.Host, error) {
 	h, err := a.store.GetHostByName(ctx, name)
 	if err != nil {
