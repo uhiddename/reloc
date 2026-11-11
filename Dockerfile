@@ -14,9 +14,12 @@ COPY . .
 # Set by BuildKit from the requested --platform.
 ARG TARGETOS
 ARG TARGETARCH
+# Set by CI (--build-arg=VERSION=...). The image has no .git for Go to read
+# the version from; left empty, the binaries report "dev".
+ARG VERSION
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath \
-             -ldflags="-s -w" \
+             -ldflags="-s -w -X=github.com/uhiddename/reloc/internal/buildinfo.version=${VERSION}" \
              -o=/reloc/dist/ ./cmd/reloc ./cmd/relocd
 
 # Base of the final stages: CA certificates and a non-root user, no shell.
