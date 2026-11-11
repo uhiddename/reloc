@@ -17,7 +17,7 @@ ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath \
              -ldflags="-s -w" \
-             -o /reloc/dist/ ./cmd/reloc ./cmd/relocd
+             -o=/reloc/dist/ ./cmd/reloc ./cmd/relocd
 
 # Base of the final stages: CA certificates and a non-root user, no shell.
 FROM gcr.io/distroless/static-debian13:nonroot@sha256:25ac8f0c3b2334a9eb05452266bd4697864a8c8ef0ef71e5e6480d7f92868329 AS runtime
