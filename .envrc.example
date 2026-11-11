@@ -2,7 +2,7 @@
 # Create the files once, readable only by you:
 #
 #   (umask 077 && mkdir -p "$HOME/.config/reloc")
-#   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/postgres_password")
+#   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/pgpassword")
 #   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/relocd_token")
 #   ssh-keygen -t ed25519 -N '' -C relocd -f "$HOME/.config/reloc/relocd_ssh_key"
 #
@@ -11,7 +11,7 @@
 # it asks for the current password to connect:
 #
 #   psql "$RELOC_PGDSN" <<'SQL'
-#   \set pw `cat "$HOME/.config/reloc/postgres_password"`
+#   \set pw `cat "$HOME/.config/reloc/pgpassword"`
 #   ALTER USER reloc PASSWORD :'pw';
 #   SQL
 #
@@ -20,15 +20,15 @@
 # password, build it again:
 #
 #   (umask 077 && : "${RELOC_PGPORT:?}" "${RELOC_COMPOSE_PGPORT:?}" && {
-#     printf 'localhost:%s:reloc:reloc:%s\n' "$RELOC_PGPORT" "$(cat "$HOME/.config/reloc/postgres_password")"
-#     printf 'localhost:%s:reloc:reloc:%s\n' "$RELOC_COMPOSE_PGPORT" "$(cat "$HOME/.config/reloc/compose/postgres_password")"
+#     printf 'localhost:%s:reloc:reloc:%s\n' "$RELOC_PGPORT" "$(cat "$HOME/.config/reloc/pgpassword")"
+#     printf 'localhost:%s:reloc:reloc:%s\n' "$RELOC_COMPOSE_PGPORT" "$(cat "$HOME/.config/reloc/compose/pgpassword")"
 #   } > "$HOME/.config/reloc/pgpass")
 
 # postgres
 # The port of the native database, also used to build its pgpass line.
 export RELOC_PGPORT='5432'
 export RELOC_PGDSN="postgres://reloc@localhost:${RELOC_PGPORT}/reloc?sslmode=disable"
-export RELOC_PGPASSWORD_FILE="$HOME/.config/reloc/postgres_password"
+export RELOC_PGPASSWORD_FILE="$HOME/.config/reloc/pgpassword"
 # For psql and other libpq tools: replaces ~/.pgpass inside the project, so
 # only this project's passwords are reachable here. relocd and reloc don't
 # use it, they read RELOC_PGPASSWORD_FILE.

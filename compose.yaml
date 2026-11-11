@@ -5,7 +5,7 @@
 # another database. Create them once:
 #
 #   (umask 077 && mkdir -p "$HOME/.config/reloc/compose")
-#   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/compose/postgres_password")
+#   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/compose/pgpassword")
 #   (umask 077 && openssl rand -hex 32 > "$HOME/.config/reloc/compose/relocd_token")
 #
 # The database takes the password only when its volume is created; after
@@ -29,7 +29,7 @@ name: reloc
 # Ignored by compose itself, only holds the anchor shared by the services.
 x-postgres-env: &postgres-env
   RELOC_PGDSN: postgres://reloc@pg:5432/reloc?sslmode=disable
-  RELOC_PGPASSWORD_FILE: /run/secrets/postgres_password
+  RELOC_PGPASSWORD_FILE: /run/secrets/pgpassword
 
 services:
   pg:
@@ -37,9 +37,9 @@ services:
     environment:
       POSTGRES_USER: reloc
       POSTGRES_DB: reloc
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_PASSWORD_FILE: /run/secrets/pgpassword
     secrets:
-      - postgres_password
+      - pgpassword
     volumes:
       # The image keeps data in /var/lib/postgresql/18/docker; mounting the
       # parent lets a future major version live next to it in the same volume.
@@ -67,7 +67,7 @@ services:
     environment:
       <<: *postgres-env
     secrets:
-      - postgres_password
+      - pgpassword
     depends_on:
       pg:
         condition: service_healthy
@@ -85,7 +85,7 @@ services:
       RELOCD_ADDR: 0.0.0.0:8080
       RELOCD_TOKEN_FILE: /run/secrets/relocd_token
     secrets:
-      - postgres_password
+      - pgpassword
       - relocd_token
     healthcheck:
       # The image has no curl: relocd itself asks its /readyz. Timeouts line
@@ -106,8 +106,8 @@ services:
         condition: service_healthy
 
 secrets:
-  postgres_password:
-    file: ${HOME}/.config/reloc/compose/postgres_password
+  pgpassword:
+    file: ${HOME}/.config/reloc/compose/pgpassword
   relocd_token:
     file: ${HOME}/.config/reloc/compose/relocd_token
 
