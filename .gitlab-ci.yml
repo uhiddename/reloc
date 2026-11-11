@@ -22,6 +22,8 @@ variables:
 
 stages:
   - test
+  # after test: an image whose tests failed never reaches the registry
+  - build
 
 # Shared by the jobs that compile: modules and build results survive between
 # pipelines. The key changes with go.sum, so new dependencies start a new
@@ -82,3 +84,52 @@ test:
     reports:
       junit: junit.xml
     expire_in: 1 week
+
+build:
+  stage: build
+  # Only the docker CLI: the daemon it talks to is the dind service below.
+  image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
+  services:
+    # A Docker daemon of this job's own (Docker-in-Docker). It needs a
+    # privileged runner, and gitlab.com shared runners are.
+    - name: docker:29.9.3-dind@sha256:08a98015fce594af7c382883bea080ea206de74402a95da9dc52b6428c8cd121
+      alias: docker
+  variables:
+    # The daemon writes TLS certificates to /certs; the runner shares the
+    # client half with this job, and the CLI talks to the daemon over TLS.
+    DOCKER_TLS_CERTDIR: /certs
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: /certs/client
+  rules:
+    # main: build and push
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables:
+        PUSH: "true"
+    # merge requests: only check that the images build and run
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  script:
+    - |
+      for target in reloc relocd; do
+        image="$CI_REGISTRY_IMAGE/$target:$CI_COMMIT_SHORT_SHA"
+        docker build \
+          --target="$target" \
+          --build-arg=VERSION="$CI_COMMIT_SHORT_SHA" \
+          --label=org.opencontainers.image.source="$CI_PROJECT_URL" \
+          --label=org.opencontainers.image.revision="$CI_COMMIT_SHA" \
+          --label=org.opencontainers.image.version="$CI_COMMIT_SHORT_SHA" \
+          --label=org.opencontainers.image.created="$CI_PIPELINE_CREATED_AT" \
+          --tag="$image" \
+          .
+        # the version must have reached the binary through -X
+        got=$(docker run --rm "$image" version)
+        [ "$got" = "$target $CI_COMMIT_SHORT_SHA" ] || { echo "version: got \"$got\""; exit 1; }
+      done
+    - |
+      if [ "$PUSH" = true ]; then
+        # the password is a token of this job and expires with it
+        printf '%s' "$CI_REGISTRY_PASSWORD" | docker login --username="$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+        for target in reloc relocd; do
+          docker push "$CI_REGISTRY_IMAGE/$target:$CI_COMMIT_SHORT_SHA"
+        done
+      fi
