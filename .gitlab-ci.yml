@@ -1,0 +1,84 @@
+# CI for reloc. Pipelines run for merge requests and for main only: without
+# these rules a push to a branch with an open MR starts two identical
+# pipelines, one for the branch and one for the MR.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+default:
+  # The same image as the build stage of the Dockerfile; bump both together.
+  image: golang:1.27.3@sha256:e519d3b0a5b285e5aa53ab9eef02bc6bbb9cb04608389b743a136a9ce75f0d1e
+  # a newer push to the same MR cancels the old pipeline
+  interruptible: true
+  timeout: 10m
+
+variables:
+  # Caches must live inside the project directory for GitLab to keep them.
+  # Directories starting with a dot are skipped by ./..., so Go doesn't
+  # treat the downloaded modules as part of the project.
+  GOMODCACHE: $CI_PROJECT_DIR/.cache/go-mod
+  GOCACHE: $CI_PROJECT_DIR/.cache/go-build
+
+stages:
+  - test
+
+# Shared by the jobs that compile: modules and build results survive between
+# pipelines. The key changes with go.sum, so new dependencies start a new
+# cache instead of growing the old one forever.
+.go-cache:
+  cache:
+    key:
+      files: [go.sum]
+    paths:
+      - .cache/go-mod
+      - .cache/go-build
+
+lint:
+  stage: test
+  extends: .go-cache
+  script:
+    # gofmt lists badly formatted files and still exits 0, so fail on output.
+    # Only tracked files: the caches above hold other modules' sources.
+    - test -z "$(gofmt -l $(git ls-files '*.go') | tee /dev/stderr)"
+    - go vet ./...
+    # go.mod and go.sum must already be tidy; -diff prints what would change
+    - go mod tidy -diff
+    # the downloaded modules must match go.sum
+    - go mod verify
+
+test:
+  stage: test
+  extends: .go-cache
+  services:
+    # A throwaway database for this job only: it lives on the job's network
+    # and is gone when the job ends.
+    - name: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+      alias: pg
+  variables:
+    # Read by the postgres service on its first start.
+    POSTGRES_USER: reloc
+    POSTGRES_DB: reloc
+    # Not a secret: it guards a database nobody else can reach, for a few
+    # minutes. It is spelled out so that nobody mistakes it for one.
+    POSTGRES_PASSWORD: ci-throwaway
+    # Read by package config, see .envrc.example.
+    RELOC_PGDSN: postgres://reloc@pg:5432/reloc?sslmode=disable
+    RELOC_PGPASSWORD_FILE: /tmp/reloc-pgpassword
+  script:
+    # the password goes through a file, as everywhere else
+    - (umask 077 && printf '%s' "$POSTGRES_PASSWORD" > "$RELOC_PGPASSWORD_FILE")
+    # gotestsum runs go test and also writes a JUnit report for the MR page
+    - >
+      go run gotest.tools/gotestsum@v1.13.0
+      --junitfile=junit.xml --format=pkgname
+      -- -race -timeout=5m -count=1 -coverprofile=coverage.out ./...
+    # the last line, "total: (statements) N%", is what coverage below reads
+    - go tool cover -func=coverage.out | tail -n 1
+  coverage: '/total:\s+\(statements\)\s+\d+\.\d+%/'
+  artifacts:
+    # upload the report even when tests fail: that is when it matters
+    when: always
+    reports:
+      junit: junit.xml
+    expire_in: 1 week
