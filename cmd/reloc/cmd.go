@@ -34,6 +34,7 @@ var commands = []command{
 	{"client disable", "-server-id -name [-apply]", clientDisable},
 	{"client enable", "-server-id -name [-apply]", clientEnable},
 	{"client conf", "-server-id -name", clientConf},
+	{"version", "", version},
 }
 
 func findCommand(args []string) (command, []string, bool) {

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uhiddename/reloc/internal/api"
 	"github.com/uhiddename/reloc/internal/app"
+	"github.com/uhiddename/reloc/internal/buildinfo"
 	"github.com/uhiddename/reloc/internal/config"
 	"github.com/uhiddename/reloc/internal/remote"
 	"github.com/uhiddename/reloc/internal/store"
@@ -23,7 +24,8 @@ const (
 	usage = `usage:
   relocd               serve the API
   relocd probe livez   exit 0 if relocd at RELOCD_ADDR is live
-  relocd probe readyz  exit 0 if it is ready to serve requests`
+  relocd probe readyz  exit 0 if it is ready to serve requests
+  relocd version       print version`
 	// how long a client may take to send headers; without this limit
 	// a slow client holds its connection forever
 	readHeaderTimeout = 5 * time.Second
@@ -34,6 +36,10 @@ const (
 )
 
 func main() {
+	os.Exit(realMain())
+}
+
+func realMain() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -43,21 +49,23 @@ func main() {
 		err = run(ctx)
 	case len(args) == 2 && args[0] == "probe" && (args[1] == "livez" || args[1] == "readyz"):
 		err = probe(ctx, "/"+args[1])
+	case len(args) == 1 && args[0] == "version":
+		_, _ = fmt.Println("relocd", buildinfo.Version())
 	default:
 		_, _ = fmt.Fprintln(os.Stderr, usage)
-		stop()
 		// 2: a wrong invocation, unlike 1, which a healthcheck reads as unhealthy
-		os.Exit(2)
+		return 2
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "relocd:", err)
-		// os.Exit skips deferred calls
-		stop()
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func run(ctx context.Context) error {
+	slog.Info("starting", "version", buildinfo.Version())
+
 	cfg, err := config.LoadRelocd()
 	if err != nil {
 		return err

@@ -8,11 +8,11 @@ import (
 	"io/fs"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uhiddename/reloc/internal/app"
+	"github.com/uhiddename/reloc/internal/buildinfo"
 	"github.com/uhiddename/reloc/internal/config"
 	"github.com/uhiddename/reloc/internal/store"
 	"github.com/uhiddename/reloc/migrations"
@@ -30,14 +30,6 @@ func usagef(format string, a ...any) error {
 var errUsage = usageError{errors.New("usage requested")}
 var errShown = errors.New("error already shown")
 
-func version() string {
-	info, ok := debug.ReadBuildInfo()
-	if !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
-		return "dev"
-	}
-	return info.Main.Version
-}
-
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -49,7 +41,7 @@ func main() {
 			os.Exit(2)
 		}
 		if errors.Is(err, errUsage) {
-			_, _ = fmt.Fprintf(os.Stderr, "reloc %s\n\n%s\n", version(), usageText())
+			_, _ = fmt.Fprintf(os.Stderr, "reloc %s\n\n%s\n", buildinfo.Version(), usageText())
 		} else {
 			_, _ = fmt.Fprintln(os.Stderr, "reloc:", err)
 		}
@@ -70,6 +62,10 @@ func run(ctx context.Context, args []string) error {
 			"unknown command %q, run \"reloc\" for the list",
 			strings.Join(args[:min(2, len(args))], " "),
 		)
+	}
+	// version must work anywhere, without a database to connect to
+	if cmd.name == "version" {
+		return cmd.run(ctx, env{}, rest)
 	}
 	cfg, err := config.LoadPostgres()
 	if err != nil {
@@ -93,4 +89,13 @@ func migrate(ctx context.Context, e env, args []string) error {
 		return err
 	}
 	return store.Migrate(ctx, e.pool, dir)
+}
+
+func version(ctx context.Context, e env, args []string) error {
+	flags := flag.NewFlagSet("version", flag.ContinueOnError)
+	if err := parseFlags(flags, args); err != nil {
+		return err
+	}
+	fmt.Println("reloc", buildinfo.Version())
+	return nil
 }
