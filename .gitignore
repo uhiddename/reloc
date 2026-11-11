@@ -1,6 +1,10 @@
-.idea/
+# secrets
 .envrc
-/reloc
-/relocd
 *.conf
 !internal/*/testdata/*.conf
+# build output
+/reloc
+/relocd
+coverage.out
+# editor
+.idea/
