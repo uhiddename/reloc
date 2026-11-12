@@ -20,10 +20,13 @@ variables:
   GOMODCACHE: $CI_PROJECT_DIR/.cache/go-mod
   GOCACHE: $CI_PROJECT_DIR/.cache/go-build
 
+# Each stage starts only after the previous one passed: an image reaches the
+# registry only when its tests passed and its scan found nothing to fix.
 stages:
   - test
-  # after test: an image whose tests failed never reaches the registry
   - build
+  - scan
+  - push
 
 # Shared by the jobs that compile: modules and build results survive between
 # pipelines. The key changes with go.sum, so new dependencies start a new
@@ -85,30 +88,35 @@ test:
       junit: junit.xml
     expire_in: 1 week
 
-build:
-  stage: build
-  # Only the docker CLI: the daemon it talks to is the dind service below.
+vulncheck:
+  stage: test
+  extends: .go-cache
+  script:
+    # Known vulnerabilities in the dependencies and the standard library.
+    # It fails only on those the code can reach, not on every listed module.
+    - go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+# A Docker daemon for the job (Docker-in-Docker). It needs a privileged
+# runner, and gitlab.com shared runners are.
+.dind:
+  # Only the docker CLI: the daemon it talks to is the service.
   image: docker:29.9.3-cli@sha256:2357639ad1ea7d0194134bf3292622fd4e562483966ed674e5d7c945b5f3b28d
   services:
-    # A Docker daemon of this job's own (Docker-in-Docker). It needs a
-    # privileged runner, and gitlab.com shared runners are.
     - name: docker:29.9.3-dind@sha256:08a98015fce594af7c382883bea080ea206de74402a95da9dc52b6428c8cd121
       alias: docker
   variables:
     # The daemon writes TLS certificates to /certs; the runner shares the
-    # client half with this job, and the CLI talks to the daemon over TLS.
+    # client half with the job, and the CLI talks to the daemon over TLS.
     DOCKER_TLS_CERTDIR: /certs
     DOCKER_HOST: tcp://docker:2376
     DOCKER_TLS_VERIFY: "1"
     DOCKER_CERT_PATH: /certs/client
-  rules:
-    # main: build and push
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      variables:
-        PUSH: "true"
-    # merge requests: only check that the images build and run
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+
+build:
+  stage: build
+  extends: .dind
   script:
+    - mkdir -p images
     - |
       for target in reloc relocd; do
         image="$CI_REGISTRY_IMAGE/$target:$CI_COMMIT_SHORT_SHA"
@@ -124,12 +132,56 @@ build:
         # the version must have reached the binary through -X
         got=$(docker run --rm "$image" version)
         [ "$got" = "$target $CI_COMMIT_SHORT_SHA" ] || { echo "version: got \"$got\""; exit 1; }
+        # the daemon is gone with this job: scan and push get the image as a file
+        docker save --output="images/$target.tar" "$image"
       done
+  artifacts:
+    paths:
+      - images/
+    expire_in: 1 day
+
+scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+    # the image runs trivy by default; the job needs a shell instead
+    entrypoint: [""]
+  variables:
+    # the vulnerability database, kept between pipelines
+    TRIVY_CACHE_DIR: $CI_PROJECT_DIR/.cache/trivy
+  cache:
+    key: trivy
+    paths:
+      - .cache/trivy
+  script:
+    # Scan both images even when the first fails, then fail if either did.
+    # Only HIGH and CRITICAL with a fixed version: those can be acted on now.
     - |
-      if [ "$PUSH" = true ]; then
-        # the password is a token of this job and expires with it
-        printf '%s' "$CI_REGISTRY_PASSWORD" | docker login --username="$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
-        for target in reloc relocd; do
-          docker push "$CI_REGISTRY_IMAGE/$target:$CI_COMMIT_SHORT_SHA"
-        done
-      fi
+      status=0
+      for target in reloc relocd; do
+        trivy image \
+          --input="images/$target.tar" \
+          --severity=HIGH,CRITICAL \
+          --ignore-unfixed \
+          --exit-code=1 \
+          --no-progress \
+          || status=1
+      done
+      exit "$status"
+
+push:
+  stage: push
+  extends: .dind
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  # once started, a push finishes: a newer pipeline doesn't cancel it halfway
+  interruptible: false
+  script:
+    # the password is a token of this job and expires with it
+    - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login --username="$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+    - |
+      for target in reloc relocd; do
+        # load keeps the name the image was saved with
+        docker load --input="images/$target.tar"
+        docker push "$CI_REGISTRY_IMAGE/$target:$CI_COMMIT_SHORT_SHA"
+      done
