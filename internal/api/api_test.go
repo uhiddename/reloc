@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -65,7 +66,7 @@ func newTestEnv(t *testing.T) testEnv {
 	}
 	st := store.New(db)
 	a := app.New(st)
-	return testEnv{handler: New(a, testToken), app: a, st: st, db: db}
+	return testEnv{handler: New(a, testToken, nil), app: a, st: st, db: db}
 }
 
 var testHostSeq atomic.Int64
@@ -165,7 +166,105 @@ func TestNewEmptyToken(t *testing.T) {
 			t.Error("New() with an empty token did not panic")
 		}
 	}()
-	New(nil, "")
+	New(nil, "", nil)
+}
+
+// fakeUI stands in for web.Handler: it answers with a status no route of the
+// API uses and echoes the path, so a test sees who served a request and with
+// which path.
+var fakeUI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusTeapot)
+	_, _ = io.WriteString(w, r.URL.Path)
+})
+
+// Who serves what: the API under /api/, behind the token; the probes on their
+// exact paths; the UI everything else, whatever the method (it refuses the
+// methods it does not serve itself).
+func TestRoutes(t *testing.T) {
+	h := New(nil, testToken, fakeUI)
+	const (
+		api   = "api"
+		ui    = "ui"
+		livez = "livez"
+	)
+	for _, tt := range []struct{ method, path, want string }{
+		{http.MethodGet, "/", ui},
+		{http.MethodGet, "/servers/7", ui},
+		{http.MethodHead, "/servers/7", ui},
+		{http.MethodGet, "/assets/index-3f9a1c.js", ui},
+		{http.MethodPost, "/servers/7", ui},
+		// near the API, but not under /api/
+		{http.MethodGet, "/apix", ui},
+		{http.MethodGet, "/v1/servers/7/clients", ui},
+		// near the probes, but not their exact paths and methods
+		{http.MethodPost, "/livez", ui},
+		{http.MethodDelete, "/readyz", ui},
+		{http.MethodGet, "/livez/", ui},
+		{http.MethodGet, "/LIVEZ", ui},
+		{http.MethodGet, "/healthz", ui},
+
+		{http.MethodGet, "/api/", api},
+		{http.MethodGet, "/api/v1/servers/7/clients", api},
+		{http.MethodPost, "/api/v1/servers/7/apply", api},
+		// unknown API paths need the token too: without it, nobody can probe
+		// which routes exist
+		{http.MethodGet, "/api/v1/unknown", api},
+		{http.MethodGet, "/api/v2/servers", api},
+
+		{http.MethodGet, "/livez", livez},
+		{http.MethodHead, "/livez", livez},
+	} {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			logs := captureLog(t)
+			w := probe(h, tt.method, tt.path)
+			switch tt.want {
+			case api:
+				wantError(t, w, http.StatusUnauthorized, "unauthorized")
+			case ui:
+				if w.Code != http.StatusTeapot {
+					t.Fatalf("code = %d, want the UI's %d; body: %s", w.Code, http.StatusTeapot, w.Body)
+				}
+				if tt.method != http.MethodHead && w.Body.String() != tt.path {
+					t.Errorf("the UI got path %q, want %q", w.Body, tt.path)
+				}
+				// UI requests are logged like API ones
+				for _, s := range []string{"path=" + tt.path, "status=418"} {
+					if !strings.Contains(logs.String(), s) {
+						t.Errorf("log does not mention %q:\n%s", s, logs)
+					}
+				}
+			case livez:
+				if w.Code != http.StatusOK {
+					t.Errorf("code = %d, want 200; body: %s", w.Code, w.Body)
+				}
+			}
+		})
+	}
+}
+
+// Without a UI the API and the probes work as before, and the other paths are
+// a plain 404, not a 401: there is nothing behind them to protect.
+func TestRoutesWithoutUI(t *testing.T) {
+	h := New(nil, testToken, nil)
+	for _, tt := range []struct {
+		method, path string
+		code         int
+	}{
+		{http.MethodGet, "/", http.StatusNotFound},
+		{http.MethodGet, "/servers/7", http.StatusNotFound},
+		{http.MethodGet, "/livez/", http.StatusNotFound},
+		// the probe's path, another method: ServeMux answers itself
+		{http.MethodPost, "/livez", http.StatusMethodNotAllowed},
+		{http.MethodGet, "/livez", http.StatusOK},
+		{http.MethodGet, "/api/v1/servers/7/clients", http.StatusUnauthorized},
+	} {
+		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
+			captureLog(t)
+			if w := probe(h, tt.method, tt.path); w.Code != tt.code {
+				t.Errorf("code = %d, want %d; body: %s", w.Code, tt.code, w.Body)
+			}
+		})
+	}
 }
 
 func (e testEnv) post(path, body string) *httptest.ResponseRecorder {
@@ -189,7 +288,7 @@ func applyPath(serverID string) string {
 }
 
 func TestApplyServerBadID(t *testing.T) {
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 	for _, id := range []string{"abc", "0", "-1", "1.5", "99999999999999999999"} {
 		t.Run(id, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, applyPath(id), nil)
@@ -202,7 +301,7 @@ func TestApplyServerBadID(t *testing.T) {
 }
 
 func TestApplyServerRequiresToken(t *testing.T) {
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 	r := httptest.NewRequest(http.MethodPost, applyPath("1"), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -210,7 +309,7 @@ func TestApplyServerRequiresToken(t *testing.T) {
 }
 
 func TestApplyServerNoKey(t *testing.T) {
-	h := New(app.New(nil), testToken)
+	h := New(app.New(nil), testToken, nil)
 	r := httptest.NewRequest(http.MethodPost, applyPath("1"), nil)
 	r.Header.Set("Authorization", "Bearer "+testToken)
 	w := httptest.NewRecorder()
@@ -220,7 +319,7 @@ func TestApplyServerNoKey(t *testing.T) {
 
 func TestApplyServerNotFound(t *testing.T) {
 	e := newTestEnv(t)
-	e.handler = New(app.New(e.st).WithAuth(ssh.Password("unused")), testToken)
+	e.handler = New(app.New(e.st).WithAuth(ssh.Password("unused")), testToken, nil)
 
 	w := e.do(http.MethodPost, applyPath(fmt.Sprint(int64(1<<62))), "")
 	wantError(t, w, http.StatusNotFound, "not found")

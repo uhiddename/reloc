@@ -24,10 +24,14 @@ type server struct {
 	app *app.App
 }
 
-// New returns the API handler. Every request must carry the token as
-// "Authorization: Bearer <token>". It panics on an empty token: the header
-// "Bearer " would then be accepted.
-func New(a *app.App, token string) http.Handler {
+// New returns the handler of relocd. Paths under /api/ need the token as
+// "Authorization: Bearer <token>"; /livez and /readyz are open for probes;
+// every other path goes to ui, the browser UI, which is open too: its pages
+// hold no data, they fetch it from the API. A nil ui leaves those paths to
+// a 404.
+//
+// New panics on an empty token: the header "Bearer " would then be accepted.
+func New(a *app.App, token string, ui http.Handler) http.Handler {
 	if token == "" {
 		panic("api: empty token")
 	}
@@ -45,7 +49,10 @@ func New(a *app.App, token string) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/clients/{id}", s.deleteClient)
 	mux.HandleFunc("GET /api/v1/clients/{id}/conf", s.clientConf)
 
-	root.Handle("/", logRequests(requireToken(token, mux)))
+	root.Handle("/api/", logRequests(requireToken(token, mux)))
+	if ui != nil {
+		root.Handle("/", logRequests(ui))
+	}
 
 	return recoverPanics(root)
 }

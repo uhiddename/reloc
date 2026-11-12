@@ -140,7 +140,7 @@ func TestRecoverPanicsNoPanic(t *testing.T) {
 // handler panic, and the probe still gets a JSON 500.
 func TestNewRecoversPanics(t *testing.T) {
 	logs := captureLog(t)
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/readyz", nil))
