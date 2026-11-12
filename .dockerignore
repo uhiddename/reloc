@@ -6,6 +6,12 @@
 !cmd/
 !internal/
 !migrations/
+!web/
+# Dependencies are installed and dist is built inside the image, never
+# copied from the host; .gitkeep keeps //go:embed working without a build.
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
 
 # Generated configs hold private keys; only test fixtures may go in.
 **/*.conf
