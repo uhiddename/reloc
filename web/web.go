@@ -37,8 +37,8 @@ const (
 //go:embed all:dist
 var dist embed.FS
 
-// Handler serves the embedded UI. It is meant for GET and HEAD requests;
-// the caller routes everything else, the API included, elsewhere.
+// Handler serves the embedded UI and refuses methods other than GET and HEAD.
+// The caller routes the API elsewhere.
 func Handler() http.Handler {
 	fsys, err := fs.Sub(dist, "dist")
 	if err != nil {
@@ -54,55 +54,83 @@ func newHandler(files fs.FS) http.Handler {
 	// and requests are served in parallel.
 	index, err := fs.ReadFile(files, indexName)
 	if err != nil {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			h := w.Header()
-			setSecurityHeaders(h)
-			http.Error(w,
-				"UI is not built: run npm run build in web/",
-				http.StatusNotFound,
-			)
-		})
+		return allowGetHead(notBuilt())
 	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return allowGetHead(&builtUI{
+		files: files,
+		index: index,
+	})
+}
+
+func notBuilt() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		setSecurityHeaders(h)
-		name := strings.TrimPrefix(r.URL.Path, "/")
-		if name == "" {
-			name = indexName
-		}
-		f, err := openFile(files, name)
-		var content io.ReadSeeker
-		switch {
-		case err == nil:
-			// a file, including index.html itself, served as it is opened,
-			// without a copy
-			defer func() { _ = f.Close() }()
-			// ServeContent needs Seek; files of embed.FS and fstest.MapFS have it,
-			// but fs.File does not promise it
-			rs, ok := f.(io.ReadSeeker)
-			if !ok {
-				http.Error(w, "internal error", http.StatusInternalServerError)
-				return
-			}
-			content = rs
-			if strings.HasPrefix(name, assetsPrefix) {
-				h.Set("Cache-Control", cacheControlForever)
-			} else {
-				h.Set("Cache-Control", cacheControlNever)
-			}
-		case strings.HasPrefix(name, assetsPrefix):
-			// Not index.html: a page loaded before a deploy asks for old asset
-			// names, and HTML in place of a script fails in a confusing way.
-			http.NotFound(w, r)
+		http.Error(w,
+			"UI is not built: run npm run build in web/",
+			http.StatusNotFound,
+		)
+	}
+}
+
+type builtUI struct {
+	files fs.FS
+	index []byte
+}
+
+func (u *builtUI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	h := w.Header()
+	setSecurityHeaders(h)
+	name := strings.TrimPrefix(r.URL.Path, "/")
+	if name == "" {
+		name = indexName
+	}
+	f, err := openFile(u.files, name)
+	var content io.ReadSeeker
+	switch {
+	case err == nil:
+		// a file, including index.html itself, served as it is opened,
+		// without a copy
+		defer func() { _ = f.Close() }()
+		// ServeContent needs Seek; files of embed.FS and fstest.MapFS have it,
+		// but fs.File does not promise it
+		rs, ok := f.(io.ReadSeeker)
+		if !ok {
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
-		default:
-			// a page of the router; the name decides Content-Type in ServeContent
-			h.Set("Cache-Control", cacheControlNever)
-			name, content = indexName, bytes.NewReader(index)
 		}
-		// no modification time: embedded files have none, and a made-up one
-		// would let the browser get 304 for a changed index.html
-		http.ServeContent(w, r, name, time.Time{}, content)
+		content = rs
+		if strings.HasPrefix(name, assetsPrefix) {
+			h.Set("Cache-Control", cacheControlForever)
+		} else {
+			h.Set("Cache-Control", cacheControlNever)
+		}
+	case strings.HasPrefix(name, assetsPrefix):
+		// Not index.html: a page loaded before a deploy asks for old asset
+		// names, and HTML in place of a script fails in a confusing way.
+		http.NotFound(w, r)
+		return
+	default:
+		// a page of the router; the name decides Content-Type in ServeContent
+		h.Set("Cache-Control", cacheControlNever)
+		name, content = indexName, bytes.NewReader(u.index)
+	}
+	// no modification time: embedded files have none, and a made-up one
+	// would let the browser get 304 for a changed index.html
+	http.ServeContent(w, r, name, time.Time{}, content)
+}
+
+// allowGetHead refuses every method but GET and HEAD: the UI only reads.
+func allowGetHead(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead:
+			next.ServeHTTP(w, r)
+		default:
+			setSecurityHeaders(w.Header())
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
 	})
 }
 

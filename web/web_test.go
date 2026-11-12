@@ -143,6 +143,36 @@ func TestHead(t *testing.T) {
 	}
 }
 
+// The UI only reads: the handler is mounted on "/" for every method (a
+// "GET /" pattern conflicts with "/api/" in ServeMux), so it refuses the
+// rest itself, built or not.
+func TestMethodNotAllowed(t *testing.T) {
+	for name, files := range map[string]fstest.MapFS{
+		"built":     built,
+		"not built": {".gitkeep": {}},
+	} {
+		h := newHandler(files)
+		for _, method := range []string{
+			http.MethodPost, http.MethodPut, http.MethodPatch,
+			http.MethodDelete, http.MethodOptions,
+		} {
+			t.Run(name+"/"+method, func(t *testing.T) {
+				w := get(t, h, method, "/servers/7")
+				if w.Code != http.StatusMethodNotAllowed {
+					t.Errorf("status = %d, want 405", w.Code)
+				}
+				if got := w.Header().Get("Allow"); got != "GET, HEAD" {
+					t.Errorf("Allow = %q, want %q", got, "GET, HEAD")
+				}
+				if strings.Contains(w.Body.String(), indexHTML) {
+					t.Error("index.html served")
+				}
+				wantSecurityHeaders(t, w)
+			})
+		}
+	}
+}
+
 // Requests are served in parallel, and each must get the whole index.html:
 // nothing may be shared between them that has a read position. Run with
 // -race, as CI does.
