@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"time"
 )
 
@@ -51,5 +52,57 @@ func logRequests(next http.Handler) http.Handler {
 			"status", rec.status,
 			"duration", time.Since(start).Round(time.Microsecond),
 		)
+	})
+}
+
+type trackingWriter struct {
+	http.ResponseWriter
+	wroteHeader bool
+}
+
+func (w *trackingWriter) WriteHeader(status int) {
+	w.wroteHeader = true
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *trackingWriter) Write(b []byte) (int, error) {
+	w.wroteHeader = true
+	return w.ResponseWriter.Write(b)
+}
+
+func (w *trackingWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// recoverPanics turns a panic in a handler into a logged error and a JSON
+// 500, instead of the dropped connection net/http leaves by default.
+func recoverPanics(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tw := &trackingWriter{ResponseWriter: w}
+		defer func() {
+			v := recover()
+			if v == nil {
+				return
+			}
+			// a deliberate abort: net/http handles it and stays silent
+			if v == http.ErrAbortHandler {
+				panic(v)
+			}
+			// no headers or query string, as in logRequests; the stack is
+			// still that of the panic, the defer runs before unwinding
+			slog.Error("panic",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"panic", v,
+				"stack", string(debug.Stack()),
+			)
+			// The status line is out: a 500 can't follow it. Abort, so the
+			// client sees a broken response, not a cut one that looks whole.
+			if tw.wroteHeader {
+				panic(http.ErrAbortHandler)
+			}
+			writeJSON(w, http.StatusInternalServerError, errorResponse{"internal error"})
+		}()
+		next.ServeHTTP(tw, r)
 	})
 }

@@ -47,7 +47,7 @@ func New(a *app.App, token string) http.Handler {
 
 	root.Handle("/", logRequests(requireToken(token, mux)))
 
-	return root
+	return recoverPanics(root)
 }
 
 type statusResponse struct {
