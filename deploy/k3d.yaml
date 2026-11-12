@@ -1,0 +1,33 @@
+#file: noinspection KubernetesUnknownResourcesInspection
+# Local Kubernetes cluster: k3s in Docker, the same distribution the VPS
+# will run. Create and remove it with:
+#
+#   k3d cluster create --config=deploy/k3d.yaml
+#   k3d cluster delete reloc
+#
+# The cluster is disposable: everything in it can be recreated from the repo.
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: reloc
+# The same version as kubectl; k3d's own default lags behind.
+image: rancher/k3s:v1.37.2-k3s1
+# One control plane node and two workers, so that scheduling, node affinity
+# of volumes and draining a node can be seen, not just read about.
+servers: 1
+agents: 2
+kubeAPI:
+  # kubectl reaches the API here; only from this machine
+  hostIP: 127.0.0.1
+  hostPort: "6550"
+ports:
+  # HTTPS of the ingress (Traefik) through the k3d load balancer.
+  # Plain HTTP is not published: the API goes over TLS only.
+  - port: 127.0.0.1:8443:443
+    nodeFilters:
+      - loadbalancer
+options:
+  kubeconfig:
+    # merge into ~/.kube/config and make it the current context
+    updateDefaultKubeconfig: true
+    switchCurrentContext: true

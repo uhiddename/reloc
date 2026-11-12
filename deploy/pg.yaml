@@ -1,0 +1,85 @@
+# Postgres for the local cluster: one instance with its own disk, reachable
+# inside the namespace as pg:5432, like the pg service in compose.yaml.
+#
+# The password comes from the Secret "pg", created once from a file:
+#
+#   kubectl create secret generic pg --namespace=reloc \
+#     --from-file=pgpassword="$HOME/.config/reloc/k8s/pgpassword"
+apiVersion: apps/v1
+# A StatefulSet, not a Deployment: its pod keeps the same name (pg-0) and the
+# same disk when it is recreated.
+kind: StatefulSet
+metadata:
+  name: pg
+  namespace: reloc
+spec:
+  replicas: 1
+  serviceName: pg
+  # the pods of this StatefulSet are those with the label below
+  selector:
+    matchLabels:
+      app: pg
+  # what each pod looks like
+  template:
+    metadata:
+      labels:
+        app: pg
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+          env:
+            # read by the image on the first start, as in compose
+            - name: POSTGRES_USER
+              value: reloc
+            - name: POSTGRES_DB
+              value: reloc
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/pg/pgpassword
+          ports:
+            - name: postgres
+              containerPort: 5432
+          volumeMounts:
+            # the same path as in compose, see the comment there
+            - name: data
+              mountPath: /var/lib/postgresql
+            # each key of the Secret becomes a file in this directory
+            - name: secrets
+              mountPath: /run/secrets/pg
+              readOnly: true
+          # Like the healthcheck in compose, and over TCP for the same
+          # reason: during first init Postgres listens only on a socket.
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-h", "127.0.0.1", "-U", "reloc", "-d", "reloc"]
+            periodSeconds: 5
+      volumes:
+        - name: secrets
+          secret:
+            secretName: pg
+  # A disk for each pod. In k3s it is a directory on the pod's node, made by
+  # local-path-provisioner; the pod is then always scheduled to that node.
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# The stable address "pg" for the pod above, which may come back with a new IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pg
+  namespace: reloc
+spec:
+  # send traffic to the pods with this label
+  selector:
+    app: pg
+  ports:
+    - name: postgres
+      port: 5432
+      # the container port by its name
+      targetPort: postgres
