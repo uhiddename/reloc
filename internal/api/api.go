@@ -38,6 +38,7 @@ func New(a *app.App, token string) http.Handler {
 	root.HandleFunc("GET /readyz", s.readyz)
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/servers", s.listServers)
 	mux.HandleFunc("GET /api/v1/servers/{id}/clients", s.listClients)
 	mux.HandleFunc("POST /api/v1/servers/{id}/clients", s.createClient)
 	mux.HandleFunc("POST /api/v1/servers/{id}/apply", s.applyServer)
