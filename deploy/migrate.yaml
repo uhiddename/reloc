@@ -1,0 +1,40 @@
+# Applies database migrations once, like "docker compose run --rm reloc migrate".
+# A Job's pod template can't be changed, so to run it again delete it first:
+#
+#   kubectl delete job reloc-migrate --namespace=reloc
+#   kubectl apply --filename=deploy/migrate.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: reloc-migrate
+  namespace: reloc
+spec:
+  # Retries if the pod fails, for example when pg is not ready yet.
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: reloc-migrate
+    spec:
+      # Never: a failed pod stays for "kubectl logs", and the Job starts a
+      # new one instead of restarting this one in place.
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: reloc:dev
+          # The image's ENTRYPOINT is "reloc"; args are appended to it.
+          args: ["migrate"]
+          env:
+            # pg is the Service from pg.yaml, like the service name in compose
+            - name: RELOC_PGDSN
+              value: postgres://reloc@pg:5432/reloc?sslmode=disable
+            - name: RELOC_PGPASSWORD_FILE
+              value: /run/secrets/pg/pgpassword
+          volumeMounts:
+            - name: secrets
+              mountPath: /run/secrets/pg
+              readOnly: true
+      volumes:
+        - name: secrets
+          secret:
+            secretName: pg

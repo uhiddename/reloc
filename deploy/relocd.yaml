@@ -1,0 +1,101 @@
+# relocd: the API, reachable inside the namespace as relocd:8080.
+#
+# The token comes from the Secret "relocd", created once from a file:
+#
+#   kubectl create secret generic relocd --namespace=reloc \
+#     --from-file=relocd_token="$HOME/.config/reloc/k8s/relocd_token"
+#
+# There is no ssh key yet, so applying configs answers 503, as in compose.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: relocd
+  namespace: reloc
+spec:
+  # One pod, never two at once: the lock that keeps applies to one server in
+  # line lives inside the process, so two pods could apply in parallel.
+  replicas: 2
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: relocd
+  template:
+    metadata:
+      labels:
+        app: relocd
+    spec:
+      # Longer than relocd's shutdown timeout (ApplyTimeout + 5s = 20s), so a
+      # running apply finishes before SIGKILL. Keep in sync with
+      # cmd/relocd/main.go, like stop_grace_period in compose.yaml.
+      terminationGracePeriodSeconds: 25
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: relocd
+          image: relocd:dev
+          env:
+            - name: RELOC_PGDSN
+              value: postgres://reloc@pg:5432/reloc?sslmode=disable
+            - name: RELOC_PGPASSWORD_FILE
+              value: /run/secrets/pg/pgpassword
+            - name: RELOCD_ADDR
+              value: 0.0.0.0:8080
+            - name: RELOCD_TOKEN_FILE
+              value: /run/secrets/relocd/relocd_token
+          ports:
+            - name: http
+              containerPort: 8080
+          # Out of the Service while the database is unreachable. The timeout
+          # is above readyTimeout (1s) in internal/api, so relocd answers
+          # before the probe gives up and the reason reaches the log.
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 2
+          # Restarted only when the process itself hangs: /livez does not
+          # touch the database, so a database outage restarts nothing.
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: pg-secret
+              mountPath: /run/secrets/pg
+              readOnly: true
+            - name: relocd-secret
+              mountPath: /run/secrets/relocd
+              readOnly: true
+      volumes:
+        - name: pg-secret
+          secret:
+            secretName: pg
+        - name: relocd-secret
+          secret:
+            secretName: relocd
+---
+# The stable address "relocd" for the pod above.
+apiVersion: v1
+kind: Service
+metadata:
+  name: relocd
+  namespace: reloc
+spec:
+  selector:
+    app: relocd
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
