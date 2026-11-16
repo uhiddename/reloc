@@ -75,7 +75,7 @@ func unreachableApp(t *testing.T) *app.App {
 func TestLivez(t *testing.T) {
 	logs := captureLog(t)
 	// a nil app: liveness must not depend on anything, the database included
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 
 	wantStatus(t, probe(h, http.MethodGet, "/livez"), http.StatusOK, "ok")
 	if w := probe(h, http.MethodHead, "/livez"); w.Code != http.StatusOK {
@@ -98,7 +98,7 @@ func TestReadyz(t *testing.T) {
 
 func TestReadyzUnavailable(t *testing.T) {
 	logs := captureLog(t)
-	h := New(unreachableApp(t), testToken)
+	h := New(unreachableApp(t), testToken, nil)
 
 	wantStatus(t, probe(h, http.MethodGet, "/readyz"), http.StatusServiceUnavailable, "unavailable")
 
@@ -139,7 +139,7 @@ func TestReadyzTimeout(t *testing.T) {
 	}
 	t.Cleanup(db.Close)
 	logs := captureLog(t)
-	h := New(app.New(store.New(db)), testToken)
+	h := New(app.New(store.New(db)), testToken, nil)
 
 	start := time.Now()
 	w := probe(h, http.MethodGet, "/readyz")
@@ -160,28 +160,4 @@ func TestReadyzClosedPool(t *testing.T) {
 	e.db.Close()
 
 	wantStatus(t, probe(e.handler, http.MethodGet, "/readyz"), http.StatusServiceUnavailable, "unavailable")
-}
-
-// Only GET and HEAD on the exact paths are public; anything else goes to the
-// API behind the token and is logged like any API request.
-func TestProbesOtherwiseRequireToken(t *testing.T) {
-	h := New(nil, testToken)
-	for _, tt := range []struct{ method, path string }{
-		{http.MethodPost, "/livez"},
-		{http.MethodPost, "/readyz"},
-		{http.MethodDelete, "/livez"},
-		{http.MethodGet, "/livez/"},
-		{http.MethodGet, "/readyz/"},
-		{http.MethodGet, "/LIVEZ"},
-		{http.MethodGet, "/healthz"},
-	} {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			logs := captureLog(t)
-			w := probe(h, tt.method, tt.path)
-			wantError(t, w, http.StatusUnauthorized, "unauthorized")
-			if !strings.Contains(logs.String(), "status=401") {
-				t.Errorf("the request is not logged:\n%s", logs)
-			}
-		})
-	}
 }

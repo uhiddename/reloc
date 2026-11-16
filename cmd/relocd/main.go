@@ -18,6 +18,7 @@ import (
 	"github.com/uhiddename/reloc/internal/config"
 	"github.com/uhiddename/reloc/internal/remote"
 	"github.com/uhiddename/reloc/internal/store"
+	"github.com/uhiddename/reloc/web"
 )
 
 const (
@@ -84,7 +85,7 @@ func run(ctx context.Context) error {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr.String(),
-		Handler:           api.New(a, cfg.Token),
+		Handler:           api.New(a, cfg.Token, web.Handler()),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 

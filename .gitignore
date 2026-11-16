@@ -6,5 +6,8 @@
 /reloc
 /relocd
 coverage.out
+/web/dist/*
+!/web/dist/.gitkeep
+/web/node_modules/
 # editor
 .idea/

@@ -21,7 +21,7 @@ func clientsPath(serverID int64) string {
 }
 
 func TestListClientsBadID(t *testing.T) {
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 	for _, id := range []string{"abc", "0", "-1", "1.5", "99999999999999999999"} {
 		t.Run(id, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, "/api/v1/servers/"+id+"/clients", nil)
@@ -207,7 +207,7 @@ func (e testEnv) storedEnabled(t *testing.T, clientID int64) bool {
 }
 
 func TestClientRoutesBadID(t *testing.T) {
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 	routes := []struct{ method, suffix string }{
 		{http.MethodPatch, ""},
 		{http.MethodDelete, ""},
@@ -535,7 +535,7 @@ func TestCreateClientBadRequest(t *testing.T) {
 }
 
 func TestCreateClientBadID(t *testing.T) {
-	h := New(nil, testToken)
+	h := New(nil, testToken, nil)
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/servers/abc/clients", strings.NewReader(`{"name": "c"}`))
 	r.Header.Set("Authorization", "Bearer "+testToken)
 	w := httptest.NewRecorder()
