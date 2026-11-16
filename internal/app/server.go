@@ -8,6 +8,14 @@ import (
 	"github.com/uhiddename/reloc/internal/wg"
 )
 
+func (a *App) ListServers(ctx context.Context) ([]vpn.Server, error) {
+	servers, err := a.store.ListServers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("app: list servers: %w", err)
+	}
+	return servers, nil
+}
+
 func (a *App) GetServer(ctx context.Context, id int64) (vpn.Server, error) {
 	c, err := a.getServer(ctx, id)
 	if err != nil {

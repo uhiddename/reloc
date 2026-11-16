@@ -5,8 +5,10 @@ import (
 	"errors"
 	"net/netip"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uhiddename/reloc/internal/store"
 )
 
@@ -39,5 +41,19 @@ func TestServerConfNotFound(t *testing.T) {
 	_, err := e.app.ServerConf(context.Background(), -1)
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("err = %v, want store.ErrNotFound", err)
+	}
+}
+
+func TestListServersUnreachable(t *testing.T) {
+	// nobody listens on port 1; pgxpool connects lazily, so New succeeds
+	db, err := pgxpool.New(context.Background(), "postgres://reloc@127.0.0.1:1/reloc?sslmode=disable&connect_timeout=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	_, err = New(store.New(db)).ListServers(context.Background())
+	if err == nil || !strings.HasPrefix(err.Error(), "app: list servers: store: list servers: ") {
+		t.Fatalf("err = %v, want the app and store prefixes", err)
 	}
 }
