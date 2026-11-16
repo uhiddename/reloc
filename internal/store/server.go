@@ -101,7 +101,6 @@ select
 	wgs.private_key as wgs_private_key, wgs.mtu as wgs_mtu, wgs.client_mtu as wgs_client_mtu
 from vpn_servers s
 left join wg_servers wgs on wgs.server_id = s.id
-where s.id = @id
 `
 
 type serverRow struct {
@@ -197,7 +196,10 @@ func (s *Store) GetServer(ctx context.Context, id int64) (vpn.Server, error) {
 
 func (s *Store) getServer(ctx context.Context, id int64) (vpn.Server, error) {
 	var zero vpn.Server
-	rows, err := s.db.Query(ctx, selectServerSQL, pgx.NamedArgs{"id": id})
+	rows, err := s.db.Query(ctx,
+		selectServerSQL+"where s.id = @id",
+		pgx.NamedArgs{"id": id},
+	)
 	if err != nil {
 		return zero, err
 	}
@@ -209,4 +211,24 @@ func (s *Store) getServer(ctx context.Context, id int64) (vpn.Server, error) {
 		return zero, err
 	}
 	return row.server()
+}
+
+func (s *Store) ListServers(ctx context.Context) ([]vpn.Server, error) {
+	servers, err := s.listServers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: list servers: %w", err)
+	}
+	return servers, nil
+}
+
+func (s *Store) listServers(ctx context.Context) ([]vpn.Server, error) {
+	pgRows, err := s.db.Query(ctx, selectServerSQL+"order by s.id")
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pgx.CollectRows(pgRows, pgx.RowToStructByName[serverRow])
+	if err != nil {
+		return nil, err
+	}
+	return mapSliceErr(rows, serverRow.server)
 }

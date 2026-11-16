@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"reflect"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -349,4 +350,79 @@ func TestGetServerNotFound(t *testing.T) {
 
 func dumpServer(srv vpn.Server) string {
 	return fmt.Sprintf("%+v ipv4=%+v ipv6=%+v", srv, deref(srv.IPv4), deref(srv.IPv6))
+}
+
+// Tests of other packages share the database and create servers at the same
+// time, so the list is checked for the servers this test made, not as a whole.
+func TestListServers(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	// created in this order, so ids are ascending
+	want := []vpn.Server{
+		testServer(t, s, true),
+		testServer(t, s, false),
+		testServer(t, s, true),
+	}
+
+	got, err := s.ListServers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// strictly ascending: a duplicate id would mean the join repeats a server
+	for i := 1; i < len(got); i++ {
+		if got[i-1].ID >= got[i].ID {
+			t.Fatalf("servers are not ordered by id: %d before %d", got[i-1].ID, got[i].ID)
+		}
+	}
+
+	byID := make(map[int64]vpn.Server, len(got))
+	for _, srv := range got {
+		byID[srv.ID] = srv
+	}
+	for _, w := range want {
+		listed, ok := byID[w.ID]
+		if !ok {
+			t.Errorf("server %d is not listed", w.ID)
+			continue
+		}
+		// GetServer is tested on its own: the list must read a server the same way
+		one, err := s.GetServer(ctx, w.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !listed.CreatedAt.Equal(one.CreatedAt) {
+			t.Errorf("server %d CreatedAt = %v, want %v", w.ID, listed.CreatedAt, one.CreatedAt)
+		}
+		listed.CreatedAt, one.CreatedAt = time.Time{}, time.Time{}
+		if !reflect.DeepEqual(listed, one) {
+			t.Errorf("server %d mismatch\nlisted: %s\nget:    %s", w.ID, dumpServer(listed), dumpServer(one))
+		}
+	}
+}
+
+func TestListServersDeleted(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	srv := testServer(t, s, false)
+	if _, err := s.db.Exec(ctx, "delete from vpn_servers where id = $1", srv.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.ListServers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, listed := range got {
+		if listed.ID == srv.ID {
+			t.Errorf("deleted server %d is listed", srv.ID)
+		}
+	}
+}
+
+func TestListServersUnreachable(t *testing.T) {
+	_, err := unreachableStore(t).ListServers(context.Background())
+	if err == nil || !strings.HasPrefix(err.Error(), "store: list servers: ") {
+		t.Fatalf("err = %v, want a store: list servers: error", err)
+	}
 }
