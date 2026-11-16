@@ -1,0 +1,51 @@
+# A local certificate authority for the k3d cluster. cert-manager itself is
+# installed from its release manifest:
+#
+#   kubectl apply --filename=https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml
+#
+# Three objects, each needed by the next:
+#
+#   selfsigned (ClusterIssuer) signs a certificate with that certificate's own key
+#     -> local-ca (Certificate) the root CA, its key and certificate in the Secret local-ca
+#       -> local-ca (ClusterIssuer) signs certificates for the cluster with that root
+#
+# Trust the root once (Keychain on macOS), and every certificate it signs is
+# trusted. That root can sign a certificate for any name, so its key never
+# leaves this cluster: the server gets Let's Encrypt instead, and only the
+# issuer named by a Certificate changes.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: local-ca
+  # A ClusterIssuer reads its Secret from cert-manager's own namespace.
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: k3d local CA
+  secretName: local-ca
+  # Long-lived and never rekeyed: a new root would have to be trusted again.
+  # The certificates it signs keep the default 90 days and renew themselves.
+  duration: 43800h # 5 years
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: selfsigned
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: local-ca
+spec:
+  ca:
+    secretName: local-ca

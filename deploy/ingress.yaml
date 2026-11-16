@@ -1,10 +1,35 @@
 # HTTPS from outside the cluster to relocd, through Traefik, the ingress
-# controller k3s ships. k3d.yaml publishes Traefik's 443 as 127.0.0.1:8443:
+# controller k3s ships. k3d.yaml publishes Traefik's 443 as 127.0.0.1:8443,
+# and every .test name resolves to 127.0.0.1 on the host:
 #
-#   curl --insecure https://127.0.0.1:8443/livez
+#   curl https://reloc.hiddename.test:8443/livez
 #
-# --insecure only until cert-manager issues a certificate: for now Traefik
-# answers with its own self-signed one.
+# The certificate is signed by the local CA from cert-manager.yaml, so it is
+# trusted once that root is (Keychain on macOS).
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: relocd
+  namespace: reloc
+spec:
+  # cert-manager keeps the key and the certificate here and renews them
+  # before they expire; the Ingress below only reads the Secret.
+  secretName: relocd-tls
+  dnsNames:
+    - reloc.hiddename.test
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  # Apple platforms reject a server certificate without "server auth".
+  # "key encipherment" is for RSA keys only, so ECDSA leaves it out.
+  usages:
+    - digital signature
+    - server auth
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: local-ca
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -13,13 +38,17 @@ metadata:
   annotations:
     # HTTPS only: the API carries the token, plain HTTP is not served
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
   ingressClassName: traefik
+  # TLS for this host with the certificate above
+  tls:
+    - hosts:
+        - reloc.hiddename.test
+      secretName: relocd-tls
   rules:
-    # No host: every name that reaches 127.0.0.1:8443 goes to relocd. A host
-    # comes with the real domain and its certificate.
-    - http:
+    # Only this name: a request for any other host gets Traefik's 404
+    - host: reloc.hiddename.test
+      http:
         paths:
           - path: /
             pathType: Prefix
