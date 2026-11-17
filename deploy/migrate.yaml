@@ -19,9 +19,13 @@ spec:
       # Never: a failed pod stays for "kubectl logs", and the Job starts a
       # new one instead of restarting this one in place.
       restartPolicy: Never
+      # the deploy token, see relocd.yaml
+      imagePullSecrets:
+        - name: gitlab-registry
       containers:
         - name: migrate
-          image: reloc:dev
+          # the same commit as relocd: migrations and server ship together
+          image: registry.gitlab.com/reloc0/reloc/reloc:c46c982a
           # The image's ENTRYPOINT is "reloc"; args are appended to it.
           args: ["migrate"]
           env:

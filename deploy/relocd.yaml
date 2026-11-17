@@ -5,6 +5,17 @@
 #   kubectl create secret generic relocd --namespace=reloc \
 #     --from-file=relocd_token="$HOME/.config/reloc/k8s/relocd_token"
 #
+# Images come from the GitLab registry with a deploy token (read_registry
+# only), kept in a Secret of the docker config type:
+#
+#   kubectl create secret generic gitlab-registry --namespace=reloc \
+#     --type=kubernetes.io/dockerconfigjson \
+#     --from-file=.dockerconfigjson=<(printf '{"auths":{"registry.gitlab.com":{"auth":"%s"}}}' \
+#       "$(printf '%s:%s' "$user" "$(< "$HOME/.config/reloc/k8s/gitlab-deploy-token")" | base64)")
+#
+# with $user set to the token's username. The JSON never reaches the disk
+# or the command line, so the token stays out of history and ps.
+#
 # There is no ssh key yet, so applying configs answers 503, as in compose.
 apiVersion: apps/v1
 kind: Deployment
@@ -14,7 +25,7 @@ metadata:
 spec:
   # One pod, never two at once: the lock that keeps applies to one server in
   # line lives inside the process, so two pods could apply in parallel.
-  replicas: 2
+  replicas: 1
   strategy:
     type: Recreate
   selector:
@@ -33,9 +44,14 @@ spec:
         runAsNonRoot: true
         seccompProfile:
           type: RuntimeDefault
+      # Credentials for the private GitLab registry, see the Secret below.
+      imagePullSecrets:
+        - name: gitlab-registry
       containers:
         - name: relocd
-          image: relocd:dev
+          # Built and pushed by CI from main; the tag is the commit, so one
+          # tag always means one image. To deploy another commit, change it.
+          image: registry.gitlab.com/reloc0/reloc/relocd:c46c982a
           env:
             - name: RELOC_PGDSN
               value: postgres://reloc@pg:5432/reloc?sslmode=disable
