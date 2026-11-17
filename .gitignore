@@ -2,6 +2,12 @@
 .envrc
 *.conf
 !internal/*/testdata/*.conf
+# Terraform: providers are downloaded by init; state holds IPs and IDs of
+# real resources and stays local for now. .terraform.lock.hcl is committed.
+/infra/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
 # build output
 /reloc
 /relocd

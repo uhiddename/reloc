@@ -1,0 +1,4 @@
+# Copy to infra/.envrc (ignored by git) and run direnv allow there. The
+# tokens are loaded only inside infra/, not for every command in the repo.
+export HCLOUD_TOKEN="$(cat ~/.config/reloc/hcloud_token)"
+export CLOUDFLARE_API_TOKEN="$(cat ~/.config/reloc/cloudflare_token)"
