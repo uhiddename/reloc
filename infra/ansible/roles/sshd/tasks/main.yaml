@@ -1,0 +1,14 @@
+# A drop-in instead of editing sshd_config: the package owns that file and
+# may replace it on upgrade. sshd takes the first value it reads for each
+# option, and reads sshd_config.d/*.conf in name order, so 10- wins over
+# 50-cloud-init.conf that the image ships.
+- name: Allow only key logins
+  ansible.builtin.copy:
+    src: 10-hardening.conf
+    dest: /etc/ssh/sshd_config.d/10-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    # a broken config is never written: sshd checks it first
+    validate: /usr/sbin/sshd -t -f %s
+  notify: Reload sshd

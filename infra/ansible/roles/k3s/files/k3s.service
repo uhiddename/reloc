@@ -1,0 +1,29 @@
+# Managed by Ansible. The unit the k3s install script writes, minus what
+# a single server doesn't need.
+[Unit]
+Description=Lightweight Kubernetes
+Documentation=https://docs.k3s.io
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# k3s tells systemd when it is up; "started" means the API is running.
+Type=notify
+# On stop, kill only k3s itself: pods keep running and are picked up again
+# after a restart. k3s-killall would stop them, it's not installed here.
+KillMode=process
+# Lets k3s manage the cgroups of the pods below its own.
+Delegate=yes
+LimitNOFILE=1048576
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+TimeoutStartSec=0
+Restart=always
+RestartSec=5s
+ExecStartPre=-/sbin/modprobe br_netfilter
+ExecStartPre=-/sbin/modprobe overlay
+ExecStart=/usr/local/bin/k3s server
+
+[Install]
+WantedBy=multi-user.target

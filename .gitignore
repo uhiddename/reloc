@@ -2,6 +2,7 @@
 .envrc
 *.conf
 !internal/*/testdata/*.conf
+!infra/ansible/roles/*/files/*.conf
 # Terraform: providers are downloaded by init; state holds IPs and IDs of
 # real resources and stays local for now. .terraform.lock.hcl is committed.
 /infra/.terraform/

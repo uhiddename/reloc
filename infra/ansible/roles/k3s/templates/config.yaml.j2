@@ -1,0 +1,6 @@
+# Managed by Ansible. Each key is a "k3s server" flag without the dashes.
+node-name: {{ inventory_hostname }}
+# The admin kubeconfig holds a client key: root only.
+write-kubeconfig-mode: "0600"
+# Secrets are stored encrypted on disk, not just base64.
+secrets-encryption: true

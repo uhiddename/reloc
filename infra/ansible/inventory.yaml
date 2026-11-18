@@ -1,0 +1,8 @@
+# The servers Terraform creates (../server.tf). The host name is the ssh
+# alias from ~/.ssh/config, so address, key and options come from there.
+all:
+  children:
+    k3s:
+      hosts:
+        k0:
+          ansible_user: root

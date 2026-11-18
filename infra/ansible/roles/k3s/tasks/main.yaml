@@ -1,0 +1,91 @@
+# No install script: the binary, its config and a systemd unit are all k3s
+# needs, and each is a task Ansible can check and repeat.
+
+# get_url skips the download while the file matches the checksum, and
+# replaces it when the version (and so the checksum) changes.
+- name: Install the k3s binary
+  ansible.builtin.get_url:
+    url: "https://github.com/k3s-io/k3s/releases/download/{{ k3s_version | urlencode }}/k3s"
+    checksum: "sha256:{{ k3s_sha256 }}"
+    dest: /usr/local/bin/k3s
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart k3s
+
+# k3s is also kubectl, crictl and ctr, picked by the name it runs under.
+- name: Link kubectl to k3s
+  ansible.builtin.file:
+    src: /usr/local/bin/k3s
+    dest: /usr/local/bin/kubectl
+    state: link
+
+- name: Create the k3s config directory
+  ansible.builtin.file:
+    path: /etc/rancher/k3s
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Written before the first start: some options (secrets-encryption) are
+# meant to be set from the beginning.
+- name: Configure k3s
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart k3s
+
+- name: Install the k3s unit
+  ansible.builtin.copy:
+    src: k3s.service
+    dest: /etc/systemd/system/k3s.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart k3s
+
+- name: Start k3s
+  ansible.builtin.systemd_service:
+    name: k3s
+    enabled: true
+    state: started
+    daemon_reload: true
+
+# A changed binary or config must be running before the checks below.
+- name: Apply pending restarts
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the node to be Ready
+  ansible.builtin.command:
+    cmd: kubectl wait node/{{ inventory_hostname }} --for=condition=Ready --timeout=180s
+  changed_when: false
+
+# The admin kubeconfig, rewritten for the Mac: the server becomes the
+# local end of the ssh tunnel, and "default" (the name of cluster, user and
+# context in every k3s) becomes the server name, so it can't clash with
+# k3d. no_log: the file holds the admin client key.
+- name: Read the admin kubeconfig
+  ansible.builtin.slurp:
+    src: /etc/rancher/k3s/k3s.yaml
+  register: k3s_kubeconfig
+  no_log: true
+
+- name: Save the kubeconfig locally
+  ansible.builtin.copy:
+    content: >-
+      {{ k3s_kubeconfig.content | b64decode
+         | replace('https://127.0.0.1:6443', 'https://127.0.0.1:' ~ k3s_local_api_port)
+         | regex_replace(k3s_default_name, k3s_own_name) }}
+    dest: "{{ k3s_kubeconfig_dest }}"
+    mode: "0600"
+  vars:
+    # single quotes: YAML keeps the backslashes as they are
+    k3s_default_name: '(?m)^(\s*(?:- )?(?:name|cluster|user|current-context)): default$'
+    k3s_own_name: '\1: {{ inventory_hostname }}'
+  delegate_to: localhost
+  become: false
+  no_log: true

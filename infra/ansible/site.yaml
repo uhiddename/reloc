@@ -1,0 +1,10 @@
+# Brings a fresh Debian server to a running single-node k3s:
+#   ansible-playbook site.yaml
+# Safe to run again: every task describes a state, not an action, and does
+# nothing when the server is already in it.
+- name: Set up the k3s servers
+  hosts: k3s
+  roles:
+    - base
+    - sshd
+    - k3s

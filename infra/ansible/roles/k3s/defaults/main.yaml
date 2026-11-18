@@ -1,0 +1,9 @@
+# Pinned like the base images in the Dockerfile. To upgrade, take both
+# from the release page: the version and the k3s line of sha256sum-amd64.txt.
+k3s_version: v1.37.2+k3s1
+k3s_sha256: 265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda
+
+# The API is reached through an ssh tunnel to this local port:
+#   ssh -N -L 16443:127.0.0.1:6443 k0
+k3s_local_api_port: 16443
+k3s_kubeconfig_dest: "{{ lookup('env', 'HOME') }}/.config/reloc/k8s/{{ inventory_hostname }}.yaml"

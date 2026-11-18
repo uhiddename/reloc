@@ -1,0 +1,26 @@
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+    upgrade: dist
+  notify: Reboot
+
+- name: Install unattended-upgrades
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+
+# Debian's 50unattended-upgrades already limits it to security updates;
+# this file turns the daily run on. Reboots stay manual.
+- name: Enable daily unattended upgrades
+  ansible.builtin.copy:
+    src: 20auto-upgrades
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+# Handlers run at the end of the play; a new kernel must be running before
+# k3s starts, so reboot now if the upgrade asked for it.
+- name: Reboot before going on
+  ansible.builtin.meta: flush_handlers

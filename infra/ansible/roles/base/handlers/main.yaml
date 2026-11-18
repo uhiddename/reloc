@@ -1,0 +1,4 @@
+# Any upgrade reboots: simpler than finding out which package needs it,
+# and the server runs nothing yet that a reboot would hurt.
+- name: Reboot
+  ansible.builtin.reboot:
