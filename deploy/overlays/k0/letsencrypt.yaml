@@ -1,0 +1,56 @@
+# Certificates from Let's Encrypt, proved with DNS-01: cert-manager puts a
+# TXT record _acme-challenge.<name> into Cloudflare, Let's Encrypt looks it
+# up, and the record is removed again. Nothing has to listen on port 80,
+# which the firewall keeps closed.
+#
+# cert-manager itself comes from its release manifest, as in k3d:
+#
+#   kubectl apply --filename=https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml
+#
+# The Cloudflare token (an account token, Zone DNS Edit on hiddename.dev
+# only) is a Secret in cert-manager's namespace, where a ClusterIssuer
+# looks for it:
+#
+#   kubectl create secret generic cloudflare-api-token --namespace=cert-manager \
+#     --from-file=api-token="$HOME/.config/reloc/k8s/k0-cloudflare-token"
+#
+# Two issuers, the same but for the server. No email: it is optional, and
+# Let's Encrypt no longer sends expiry mail; cert-manager renews by itself.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    # The ACME account key, created by cert-manager on first use.
+    privateKeySecretRef:
+      name: letsencrypt-staging-account
+    solvers:
+      - selector:
+          dnsZones:
+            - hiddename.dev
+        dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-account
+    solvers:
+      - selector:
+          dnsZones:
+            - hiddename.dev
+        dns01:
+          cloudflare:
+            apiTokenSecretRef:
+              name: cloudflare-api-token
+              key: api-token
