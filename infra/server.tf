@@ -20,12 +20,18 @@ resource "hcloud_firewall" "node" {
 
   # Only https: certificates come through DNS-01, so port 80 is not needed.
   # The Kubernetes API (6443) stays closed; kubectl goes through ssh.
+  #
+  # And only from Cloudflare: reloc is proxied (dns.tf), so a request from
+  # anywhere else went around Access, straight to the server's IP.
   rule {
-    description = "https"
+    description = "https from Cloudflare"
     direction   = "in"
     protocol    = "tcp"
     port        = "443"
-    source_ips  = ["0.0.0.0/0", "::/0"]
+    source_ips = concat(
+      data.cloudflare_ip_ranges.cloudflare.ipv4_cidrs,
+      data.cloudflare_ip_ranges.cloudflare.ipv6_cidrs,
+    )
   }
 
   rule {
@@ -35,6 +41,10 @@ resource "hcloud_firewall" "node" {
     source_ips  = ["0.0.0.0/0", "::/0"]
   }
 }
+
+# The addresses Cloudflare connects to servers from; they change rarely,
+# and a plan shows when they did.
+data "cloudflare_ip_ranges" "cloudflare" {}
 
 resource "hcloud_server" "node" {
   name         = var.name

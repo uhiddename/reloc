@@ -27,3 +27,11 @@ variable "domain" {
   type        = string
   default     = "hiddename.dev"
 }
+
+# Mail addresses are personal and the repository may become public, so the
+# list is in terraform.tfvars, which is not committed; see
+# terraform.tfvars.example.
+variable "access_emails" {
+  description = "Who Cloudflare Access lets into reloc, after a one-time code sent to the address."
+  type        = list(string)
+}

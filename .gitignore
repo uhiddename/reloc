@@ -9,6 +9,7 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+/infra/terraform.tfvars
 # build output
 /reloc
 /relocd

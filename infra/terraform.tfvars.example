@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (not committed) and put the real addresses in.
+access_emails = [
+  "you@example.com",
+]

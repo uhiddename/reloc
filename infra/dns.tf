@@ -6,12 +6,15 @@ data "cloudflare_zone" "main" {
 
 locals {
   # The server's own name (ssh, kubectl through ssh) and the app on it.
-  # Not proxied: Cloudflare passes these as plain DNS, so names resolve to
-  # the server itself. reloc gets proxied with Cloudflare Access later.
   hosts = {
     node  = "${var.name}.${var.domain}"
     reloc = "reloc.${var.domain}"
   }
+
+  # Proxied names resolve to Cloudflare, which forwards https to the server
+  # and puts Access in front of it (access.tf). The node name is not
+  # proxied: Cloudflare forwards only http(s), not ssh.
+  proxied = toset(["reloc"])
 }
 
 resource "cloudflare_dns_record" "a" {
@@ -21,8 +24,13 @@ resource "cloudflare_dns_record" "a" {
   name    = each.value
   type    = "A"
   content = hcloud_server.node.ipv4_address
-  ttl     = 300
-  proxied = false
+  proxied = contains(local.proxied, each.key)
+  # Cloudflare sets the TTL of proxied records itself; 1 means automatic.
+  ttl = contains(local.proxied, each.key) ? 1 : 300
+
+  # Proxy only once Access is there, or reloc would be open through
+  # Cloudflare for a moment.
+  depends_on = [cloudflare_zero_trust_access_application.reloc]
 }
 
 resource "cloudflare_dns_record" "aaaa" {
@@ -32,6 +40,11 @@ resource "cloudflare_dns_record" "aaaa" {
   name    = each.value
   type    = "AAAA"
   content = hcloud_server.node.ipv6_address
-  ttl     = 300
-  proxied = false
+  proxied = contains(local.proxied, each.key)
+  # Cloudflare sets the TTL of proxied records itself; 1 means automatic.
+  ttl = contains(local.proxied, each.key) ? 1 : 300
+
+  # Proxy only once Access is there, or reloc would be open through
+  # Cloudflare for a moment.
+  depends_on = [cloudflare_zero_trust_access_application.reloc]
 }
