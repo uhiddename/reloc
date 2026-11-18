@@ -11,8 +11,8 @@
 #
 # Trust the root once (Keychain on macOS), and every certificate it signs is
 # trusted. That root can sign a certificate for any name, so its key never
-# leaves this cluster: the server gets Let's Encrypt instead, and only the
-# issuer named by a Certificate changes.
+# leaves this cluster: k0 gets Let's Encrypt instead (overlays/k0), and only
+# the issuer named by a Certificate changes.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:

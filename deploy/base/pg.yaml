@@ -1,4 +1,4 @@
-# Postgres for the local cluster: one instance with its own disk, reachable
+# Postgres for the cluster: one instance with its own disk, reachable
 # inside the namespace as pg:5432, like the pg service in compose.yaml.
 #
 # The password comes from the Secret "pg", created once from a file:

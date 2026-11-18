@@ -1,0 +1,41 @@
+# The local k3d cluster (cluster.yaml) at https://reloc.hiddename.test:8443,
+# with a certificate from the local CA in local-ca.yaml:
+#
+#   kubectl diff --kustomize=deploy/overlays/k3d
+#   kubectl apply --kustomize=deploy/overlays/k3d
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+  - local-ca.yaml
+
+# The commit to run: both images always get the same tag.
+images:
+  - name: registry.gitlab.com/reloc0/reloc/reloc
+    newTag: c46c982a
+  - name: registry.gitlab.com/reloc0/reloc/relocd
+    newTag: c46c982a
+
+# The placeholders of base/ingress.yaml. A JSON patch replaces exactly the
+# fields it names, by their path; everything else stays as in the base.
+patches:
+  - target:
+      kind: Certificate
+      name: relocd
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames/0
+        value: reloc.hiddename.test
+      - op: replace
+        path: /spec/issuerRef/name
+        value: local-ca
+  - target:
+      kind: Ingress
+      name: relocd
+    patch: |-
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: reloc.hiddename.test
+      - op: replace
+        path: /spec/rules/0/host
+        value: reloc.hiddename.test

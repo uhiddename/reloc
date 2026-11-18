@@ -49,9 +49,10 @@ spec:
         - name: gitlab-registry
       containers:
         - name: relocd
-          # Built and pushed by CI from main; the tag is the commit, so one
-          # tag always means one image. To deploy another commit, change it.
-          image: registry.gitlab.com/reloc0/reloc/relocd:c46c982a
+          # Built and pushed by CI from main. No tag here: each overlay sets
+          # it (images: in its kustomization.yaml), so the clusters can run
+          # different commits of the same manifests.
+          image: registry.gitlab.com/reloc0/reloc/relocd
           env:
             - name: RELOC_PGDSN
               value: postgres://reloc@pg:5432/reloc?sslmode=disable

@@ -1,11 +1,12 @@
 #file: noinspection KubernetesUnknownResourcesInspection
-# Local Kubernetes cluster: k3s in Docker, the same distribution the VPS
-# will run. Create and remove it with:
+# Local Kubernetes cluster: k3s in Docker, the same distribution k0
+# runs. Create and remove it with:
 #
-#   k3d cluster create --config=deploy/k3d.yaml
+#   k3d cluster create --config=deploy/overlays/k3d/cluster.yaml
 #   k3d cluster delete reloc
 #
-# The cluster is disposable: everything in it can be recreated from the repo.
+# The cluster is disposable: everything in it can be recreated from the repo,
+# the apps with kubectl apply --kustomize=deploy/overlays/k3d.
 apiVersion: k3d.io/v1alpha5
 kind: Simple
 metadata:

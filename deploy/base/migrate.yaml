@@ -2,7 +2,7 @@
 # A Job's pod template can't be changed, so to run it again delete it first:
 #
 #   kubectl delete job reloc-migrate --namespace=reloc
-#   kubectl apply --filename=deploy/migrate.yaml
+#   kubectl apply --kustomize=deploy/overlays/<cluster>
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -24,8 +24,9 @@ spec:
         - name: gitlab-registry
       containers:
         - name: migrate
-          # the same commit as relocd: migrations and server ship together
-          image: registry.gitlab.com/reloc0/reloc/reloc:c46c982a
+          # The tag comes from the overlay, like relocd's: migrations and
+          # server ship together.
+          image: registry.gitlab.com/reloc0/reloc/reloc
           # The image's ENTRYPOINT is "reloc"; args are appended to it.
           args: ["migrate"]
           env:

@@ -1,11 +1,10 @@
 # HTTPS from outside the cluster to relocd, through Traefik, the ingress
-# controller k3s ships. k3d.yaml publishes Traefik's 443 as 127.0.0.1:8443,
-# and every .test name resolves to 127.0.0.1 on the host:
+# controller k3s ships.
 #
-#   curl https://reloc.hiddename.test:8443/livez
-#
-# The certificate is signed by the local CA from cert-manager.yaml, so it is
-# trusted once that root is (Keychain on macOS).
+# The host name and the issuer differ per cluster, so here they are
+# placeholders: reloc.invalid can never resolve (.invalid is reserved), and
+# no issuer is called set-by-overlay. Each overlay replaces both; applying
+# the base alone gives a certificate that is never issued.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -16,7 +15,7 @@ spec:
   # before they expire; the Ingress below only reads the Secret.
   secretName: relocd-tls
   dnsNames:
-    - reloc.hiddename.test
+    - reloc.invalid
   privateKey:
     algorithm: ECDSA
     size: 256
@@ -28,7 +27,7 @@ spec:
   issuerRef:
     group: cert-manager.io
     kind: ClusterIssuer
-    name: local-ca
+    name: set-by-overlay
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -43,11 +42,11 @@ spec:
   # TLS for this host with the certificate above
   tls:
     - hosts:
-        - reloc.hiddename.test
+        - reloc.invalid
       secretName: relocd-tls
   rules:
     # Only this name: a request for any other host gets Traefik's 404
-    - host: reloc.hiddename.test
+    - host: reloc.invalid
       http:
         paths:
           - path: /

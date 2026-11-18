@@ -1,0 +1,15 @@
+# What every cluster runs. Not applied on its own: an overlay adds what
+# differs (host name, issuer, image tags) and is what gets applied:
+#
+#   kubectl apply --kustomize=deploy/overlays/k3d
+#
+# Secrets are not here: each cluster has its own, created by hand, see the
+# comments in pg.yaml and relocd.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - pg.yaml
+  - migrate.yaml
+  - relocd.yaml
+  - ingress.yaml
