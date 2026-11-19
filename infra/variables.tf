@@ -35,3 +35,14 @@ variable "access_emails" {
   description = "Who Cloudflare Access lets into reloc, after a one-time code sent to the address."
   type        = list(string)
 }
+
+# Personal, like the mail addresses: in terraform.tfvars.
+variable "admin_ips" {
+  description = "Where ssh to the server is allowed from, as CIDRs: the home IPv4 as /32, and its IPv6 prefix if home has one."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.admin_ips) > 0 && alltrue([for cidr in var.admin_ips : can(cidrhost(cidr, 0))])
+    error_message = "admin_ips must be a non-empty list of CIDRs, like 203.0.113.7/32."
+  }
+}

@@ -10,12 +10,16 @@ resource "hcloud_ssh_key" "admin" {
 resource "hcloud_firewall" "node" {
   name = var.name
 
+  # ssh only from home: away from it, through the home WireGuard. If home is
+  # down, add the current address in the Hetzner console (Firewalls) or in
+  # terraform.tfvars: the firewall is changed through Hetzner's API, not on
+  # the server, so a wrong list can't lock it out for good.
   rule {
-    description = "ssh"
+    description = "ssh from home"
     direction   = "in"
     protocol    = "tcp"
     port        = "22"
-    source_ips  = ["0.0.0.0/0", "::/0"]
+    source_ips  = var.admin_ips
   }
 
   # Only https: certificates come through DNS-01, so port 80 is not needed.
