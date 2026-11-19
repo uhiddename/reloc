@@ -10,6 +10,13 @@ locals {
   account_id = data.cloudflare_zone.main.account.id
 }
 
+# The Zero Trust organization, made by hand in the dashboard; its team
+# domain (divine-band-6bfb.cloudflareaccess.com) has the login page and
+# issues the JWTs.
+data "cloudflare_zero_trust_organization" "main" {
+  account_id = local.account_id
+}
+
 # Login by a code sent to the mail: no passwords, no third-party accounts.
 resource "cloudflare_zero_trust_access_identity_provider" "otp" {
   account_id = local.account_id
