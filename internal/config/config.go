@@ -1,16 +1,20 @@
 // Package config reads process configuration from environment variables.
 // It is the only place that knows their names:
 //
-//	RELOC_PGDSN            database connection string, without the password
-//	RELOC_PGPASSWORD_FILE  file with the database password
-//	RELOCD_ADDR            relocd listen address, ip:port
-//	RELOCD_TOKEN_FILE      file with the API token
-//	RELOCD_SSH_KEY_FILE    ssh key file; unset disables applying configs
+//	RELOC_PGDSN                database connection string, without the password
+//	RELOC_PGPASSWORD_FILE      file with the database password
+//	RELOCD_ADDR                relocd listen address, ip:port
+//	RELOCD_TOKEN_FILE          file with the API token
+//	RELOCD_SSH_KEY_FILE        ssh key file; unset disables applying configs
+//	RELOCD_CF_ACCESS           1 to require a Cloudflare Access JWT on requests, 0 where no Cloudflare is in front; always set
+//	RELOCD_CF_ACCESS_ISSUER    team domain, https://<team>.cloudflareaccess.com; only with RELOCD_CF_ACCESS=1
+//	RELOCD_CF_ACCESS_AUDIENCE  the Access application's AUD tag; only with RELOCD_CF_ACCESS=1
 package config
 
 import (
 	"fmt"
 	"net/netip"
+	"net/url"
 	"os"
 	"strings"
 
@@ -18,12 +22,20 @@ import (
 )
 
 const (
-	envPostgresDSN          = "RELOC_PGDSN"
-	envPostgresPasswordFile = "RELOC_PGPASSWORD_FILE"
-	envRelocdAddr           = "RELOCD_ADDR"
-	envRelocdTokenFile      = "RELOCD_TOKEN_FILE"
-	envRelocdSSHKeyFile     = "RELOCD_SSH_KEY_FILE"
+	envPostgresDSN            = "RELOC_PGDSN"
+	envPostgresPasswordFile   = "RELOC_PGPASSWORD_FILE"
+	envRelocdAddr             = "RELOCD_ADDR"
+	envRelocdTokenFile        = "RELOCD_TOKEN_FILE"
+	envRelocdSSHKeyFile       = "RELOCD_SSH_KEY_FILE"
+	envRelocdCFAccess         = "RELOCD_CF_ACCESS"
+	envRelocdCFAccessIssuer   = "RELOCD_CF_ACCESS_ISSUER"
+	envRelocdCFAccessAudience = "RELOCD_CF_ACCESS_AUDIENCE"
 )
+
+type CFAccess struct {
+	Issuer   string
+	Audience string
+}
 
 // Relocd is the configuration of the relocd daemon.
 type Relocd struct {
@@ -31,6 +43,7 @@ type Relocd struct {
 	Token      string
 	SSHKeyPath string // empty if not configured
 	Postgres   *pgxpool.Config
+	CFAccess   *CFAccess // nil if RELOCD_CF_ACCESS=0
 }
 
 // LoadRelocd reads the configuration of the relocd daemon.
@@ -47,11 +60,16 @@ func LoadRelocd() (Relocd, error) {
 	if err != nil {
 		return Relocd{}, err
 	}
+	cfAccess, err := loadCFAccess()
+	if err != nil {
+		return Relocd{}, err
+	}
 	return Relocd{
 		Addr:       addr,
 		Token:      token,
 		SSHKeyPath: os.Getenv(envRelocdSSHKeyFile),
 		Postgres:   pg,
+		CFAccess:   cfAccess,
 	}, nil
 }
 
@@ -64,11 +82,11 @@ func LoadRelocdAddr() (netip.AddrPort, error) {
 
 // LoadPostgres parses the connection string and reads the password file.
 func LoadPostgres() (*pgxpool.Config, error) {
-	url := os.Getenv(envPostgresDSN)
-	if url == "" {
+	u := os.Getenv(envPostgresDSN)
+	if u == "" {
 		return nil, fmt.Errorf("config: %s is not set", envPostgresDSN)
 	}
-	cfg, err := pgxpool.ParseConfig(url)
+	cfg, err := pgxpool.ParseConfig(u)
 	if err != nil {
 		return nil, fmt.Errorf("config: %s: %w", envPostgresDSN, err)
 	}
@@ -118,4 +136,40 @@ func listenAddr(name string) (netip.AddrPort, error) {
 		return netip.AddrPort{}, fmt.Errorf("config: %s: port must not be 0", name)
 	}
 	return addr, nil
+}
+
+func loadCFAccess() (*CFAccess, error) {
+	iss, aud := os.Getenv(envRelocdCFAccessIssuer), os.Getenv(envRelocdCFAccessAudience)
+	switch os.Getenv(envRelocdCFAccess) {
+	case "0":
+		if iss != "" {
+			return nil, fmt.Errorf("config: %s is set while %s=0", envRelocdCFAccessIssuer, envRelocdCFAccess)
+		}
+		if aud != "" {
+			return nil, fmt.Errorf("config: %s is set while %s=0", envRelocdCFAccessAudience, envRelocdCFAccess)
+		}
+		return nil, nil
+	case "1":
+		if iss == "" {
+			return nil, fmt.Errorf("config: %s is not set", envRelocdCFAccessIssuer)
+		}
+		if aud == "" {
+			return nil, fmt.Errorf("config: %s is not set", envRelocdCFAccessAudience)
+		}
+	default:
+		return nil, fmt.Errorf("config: %s must be 0 (off) or 1 (on)", envRelocdCFAccess)
+	}
+
+	u, err := url.Parse(iss)
+	if err != nil {
+		return nil, fmt.Errorf("config: %s: %w", envRelocdCFAccessIssuer, err)
+	}
+	if u.Host == "" || iss != "https://"+strings.ToLower(u.Hostname()) {
+		return nil, fmt.Errorf("config: %s: must be https://<host> with nothing after it", envRelocdCFAccessIssuer)
+	}
+
+	return &CFAccess{
+		Issuer:   iss,
+		Audience: aud,
+	}, nil
 }

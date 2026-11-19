@@ -158,6 +158,9 @@ func setRelocd(t *testing.T) {
 	t.Setenv("RELOCD_ADDR", "127.0.0.1:8080")
 	t.Setenv("RELOCD_TOKEN_FILE", writeSecret(t, "token\n"))
 	t.Setenv("RELOCD_SSH_KEY_FILE", "/keys/relocd")
+	t.Setenv("RELOCD_CF_ACCESS", "0")
+	t.Setenv("RELOCD_CF_ACCESS_ISSUER", "")
+	t.Setenv("RELOCD_CF_ACCESS_AUDIENCE", "")
 }
 
 func TestLoadRelocd(t *testing.T) {
@@ -239,6 +242,92 @@ func TestLoadRelocdTokenRequired(t *testing.T) {
 	t.Setenv("RELOCD_TOKEN_FILE", "")
 	_, err := LoadRelocd()
 	wantErr(t, err, "config: RELOCD_TOKEN_FILE is not set")
+}
+
+const (
+	testIssuer   = "https://team.cloudflareaccess.com"
+	testAudience = "4714c1358e65fe4b408ad6d432a5f878f08194bdb4752441fd56faefa9b2b6f2"
+)
+
+func TestLoadRelocdCFAccess(t *testing.T) {
+	setRelocd(t)
+	t.Setenv("RELOCD_CF_ACCESS", "1")
+	t.Setenv("RELOCD_CF_ACCESS_ISSUER", testIssuer)
+	t.Setenv("RELOCD_CF_ACCESS_AUDIENCE", testAudience)
+
+	cfg, err := LoadRelocd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := CFAccess{Issuer: testIssuer, Audience: testAudience}
+	if cfg.CFAccess == nil || *cfg.CFAccess != want {
+		t.Errorf("CFAccess = %+v, want %+v", cfg.CFAccess, want)
+	}
+}
+
+// Off only when asked for: nil is never the result of a forgotten setting.
+func TestLoadRelocdCFAccessOff(t *testing.T) {
+	setRelocd(t)
+
+	cfg, err := LoadRelocd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CFAccess != nil {
+		t.Errorf("CFAccess = %+v, want nil", cfg.CFAccess)
+	}
+}
+
+func TestLoadRelocdCFAccessErrors(t *testing.T) {
+	tests := []struct {
+		name            string
+		on, issuer, aud string
+		wantParts       []string
+	}{
+		// the switch itself
+		{"not set", "", "", "", []string{"config: RELOCD_CF_ACCESS "}},
+		{"not 0 or 1", "true", testIssuer, testAudience, []string{"config: RELOCD_CF_ACCESS "}},
+		{"spaces", " 1", testIssuer, testAudience, []string{"config: RELOCD_CF_ACCESS "}},
+
+		// on: both are required
+		{"on, no issuer", "1", "", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"on, no audience", "1", testIssuer, "", []string{"config: RELOCD_CF_ACCESS_AUDIENCE"}},
+
+		// off: a leftover setting is a contradiction, not something to ignore
+		{"off, issuer set", "0", testIssuer, "", []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"off, audience set", "0", "", testAudience, []string{"config: RELOCD_CF_ACCESS_AUDIENCE"}},
+
+		// the issuer is compared with the token's iss byte for byte, so
+		// anything but https://<host> would fail every request later
+		{"trailing slash", "1", testIssuer + "/", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"path", "1", testIssuer + "/cdn-cgi/access/certs", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"query", "1", testIssuer + "?a=1", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"empty query", "1", testIssuer + "?", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"fragment", "1", testIssuer + "#f", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"empty fragment", "1", testIssuer + "#", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"user", "1", "https://me@team.cloudflareaccess.com", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"http", "1", "http://team.cloudflareaccess.com", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"upper case scheme", "1", "HTTPS://team.cloudflareaccess.com", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"port", "1", testIssuer + ":8443", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		// the same server, but not the same string as the token's iss
+		{"default port", "1", testIssuer + ":443", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"port only", "1", "https://:443", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		// DNS ignores case, but the token's iss is lower case
+		{"upper case host", "1", "https://Team.cloudflareaccess.com", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"no scheme", "1", "team.cloudflareaccess.com", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"no host", "1", "https://", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+		{"scheme only", "1", "https:", testAudience, []string{"config: RELOCD_CF_ACCESS_ISSUER"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setRelocd(t)
+			t.Setenv("RELOCD_CF_ACCESS", tt.on)
+			t.Setenv("RELOCD_CF_ACCESS_ISSUER", tt.issuer)
+			t.Setenv("RELOCD_CF_ACCESS_AUDIENCE", tt.aud)
+			_, err := LoadRelocd()
+			wantErr(t, err, tt.wantParts...)
+		})
+	}
 }
 
 // The session time zone must reach a real server, not only the config.
