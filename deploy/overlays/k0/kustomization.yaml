@@ -14,9 +14,9 @@ resources:
 # The commit to run: both images always get the same tag.
 images:
   - name: registry.gitlab.com/reloc0/reloc/reloc
-    newTag: c46c982a
+    newTag: b16131ca
   - name: registry.gitlab.com/reloc0/reloc/relocd
-    newTag: c46c982a
+    newTag: b16131ca
 
 # The placeholders of base/ingress.yaml, as in the k3d overlay.
 patches:
