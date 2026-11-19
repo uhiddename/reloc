@@ -2,3 +2,8 @@
 # tokens are loaded only inside infra/, not for every command in the repo.
 export HCLOUD_TOKEN="$(cat ~/.config/reloc/hcloud_token)"
 export CLOUDFLARE_API_TOKEN="$(cat ~/.config/reloc/cloudflare_token)"
+
+# The state backend (versions.tf): a GitLab personal access token with the
+# api scope, and the name of the user it belongs to.
+export TF_HTTP_USERNAME='your-gitlab-username'
+export TF_HTTP_PASSWORD="$(cat ~/.config/reloc/gitlab-tf-token)"
