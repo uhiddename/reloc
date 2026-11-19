@@ -43,3 +43,25 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: reloc.hiddename.dev
+  # Cloudflare Access is in front of k0 (infra/access.tf), and relocd
+  # checks its JWT on everything but the probes. The values are terraform
+  # output cf_access_issuer and cf_access_aud; neither is a secret.
+  - target:
+      kind: Deployment
+      name: relocd
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: RELOCD_CF_ACCESS
+          value: "1"
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: RELOCD_CF_ACCESS_ISSUER
+          value: https://divine-band-6bfb.cloudflareaccess.com
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: RELOCD_CF_ACCESS_AUDIENCE
+          value: 81ddbcb27009a64bcd0cb368bd3a638709e13a3be7257d16af22776a5cae9430
