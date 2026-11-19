@@ -75,7 +75,7 @@ func unreachableApp(t *testing.T) *app.App {
 func TestLivez(t *testing.T) {
 	logs := captureLog(t)
 	// a nil app: liveness must not depend on anything, the database included
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 
 	wantStatus(t, probe(h, http.MethodGet, "/livez"), http.StatusOK, "ok")
 	if w := probe(h, http.MethodHead, "/livez"); w.Code != http.StatusOK {
@@ -98,7 +98,7 @@ func TestReadyz(t *testing.T) {
 
 func TestReadyzUnavailable(t *testing.T) {
 	logs := captureLog(t)
-	h := New(unreachableApp(t), testToken, nil)
+	h := New(unreachableApp(t), testToken, nil, nil)
 
 	wantStatus(t, probe(h, http.MethodGet, "/readyz"), http.StatusServiceUnavailable, "unavailable")
 
@@ -139,7 +139,7 @@ func TestReadyzTimeout(t *testing.T) {
 	}
 	t.Cleanup(db.Close)
 	logs := captureLog(t)
-	h := New(app.New(store.New(db)), testToken, nil)
+	h := New(app.New(store.New(db)), testToken, nil, nil)
 
 	start := time.Now()
 	w := probe(h, http.MethodGet, "/readyz")

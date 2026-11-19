@@ -84,6 +84,8 @@ services:
       <<: *postgres-env
       RELOCD_ADDR: 0.0.0.0:8080
       RELOCD_TOKEN_FILE: /run/secrets/relocd_token
+      # no Cloudflare in front of compose
+      RELOCD_CF_ACCESS: "0"
     secrets:
       - pgpassword
       - relocd_token

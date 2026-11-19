@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
+
 	"github.com/uhiddename/reloc/internal/app"
 )
 
@@ -30,8 +32,12 @@ type server struct {
 // hold no data, they fetch it from the API. A nil ui leaves those paths to
 // a 404.
 //
+// With a non-nil cfAccess, everything but the probes also needs the JWT of
+// Cloudflare Access, see requireCFAccess. The probes come from the kubelet,
+// straight to the pod, never through Cloudflare.
+//
 // New panics on an empty token: the header "Bearer " would then be accepted.
-func New(a *app.App, token string, ui http.Handler) http.Handler {
+func New(a *app.App, token string, cfAccess *oidc.IDTokenVerifier, ui http.Handler) http.Handler {
 	if token == "" {
 		panic("api: empty token")
 	}
@@ -50,9 +56,10 @@ func New(a *app.App, token string, ui http.Handler) http.Handler {
 	mux.HandleFunc("DELETE /api/v1/clients/{id}", s.deleteClient)
 	mux.HandleFunc("GET /api/v1/clients/{id}/conf", s.clientConf)
 
-	root.Handle("/api/", logRequests(requireToken(token, mux)))
+	// logRequests outside the checks: a refused request is logged too
+	root.Handle("/api/", logRequests(requireCFAccess(cfAccess, requireToken(token, mux))))
 	if ui != nil {
-		root.Handle("/", logRequests(ui))
+		root.Handle("/", logRequests(requireCFAccess(cfAccess, ui)))
 	}
 
 	return recoverPanics(root)

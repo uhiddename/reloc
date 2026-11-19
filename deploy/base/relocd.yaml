@@ -62,6 +62,8 @@ spec:
               value: 0.0.0.0:8080
             - name: RELOCD_TOKEN_FILE
               value: /run/secrets/relocd/relocd_token
+            # RELOCD_CF_ACCESS comes from the overlay, which knows whether
+            # Cloudflare is in front; without it relocd does not start.
           ports:
             - name: http
               containerPort: 8080

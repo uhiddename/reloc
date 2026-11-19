@@ -66,7 +66,7 @@ func newTestEnv(t *testing.T) testEnv {
 	}
 	st := store.New(db)
 	a := app.New(st)
-	return testEnv{handler: New(a, testToken, nil), app: a, st: st, db: db}
+	return testEnv{handler: New(a, testToken, nil, nil), app: a, st: st, db: db}
 }
 
 var testHostSeq atomic.Int64
@@ -166,7 +166,7 @@ func TestNewEmptyToken(t *testing.T) {
 			t.Error("New() with an empty token did not panic")
 		}
 	}()
-	New(nil, "", nil)
+	New(nil, "", nil, nil)
 }
 
 // fakeUI stands in for web.Handler: it answers with a status no route of the
@@ -181,7 +181,7 @@ var fakeUI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 // exact paths; the UI everything else, whatever the method (it refuses the
 // methods it does not serve itself).
 func TestRoutes(t *testing.T) {
-	h := New(nil, testToken, fakeUI)
+	h := New(nil, testToken, nil, fakeUI)
 	const (
 		api   = "api"
 		ui    = "ui"
@@ -245,7 +245,7 @@ func TestRoutes(t *testing.T) {
 // Without a UI the API and the probes work as before, and the other paths are
 // a plain 404, not a 401: there is nothing behind them to protect.
 func TestRoutesWithoutUI(t *testing.T) {
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 	for _, tt := range []struct {
 		method, path string
 		code         int
@@ -288,7 +288,7 @@ func applyPath(serverID string) string {
 }
 
 func TestApplyServerBadID(t *testing.T) {
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 	for _, id := range []string{"abc", "0", "-1", "1.5", "99999999999999999999"} {
 		t.Run(id, func(t *testing.T) {
 			r := httptest.NewRequest(http.MethodPost, applyPath(id), nil)
@@ -301,7 +301,7 @@ func TestApplyServerBadID(t *testing.T) {
 }
 
 func TestApplyServerRequiresToken(t *testing.T) {
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 	r := httptest.NewRequest(http.MethodPost, applyPath("1"), nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -309,7 +309,7 @@ func TestApplyServerRequiresToken(t *testing.T) {
 }
 
 func TestApplyServerNoKey(t *testing.T) {
-	h := New(app.New(nil), testToken, nil)
+	h := New(app.New(nil), testToken, nil, nil)
 	r := httptest.NewRequest(http.MethodPost, applyPath("1"), nil)
 	r.Header.Set("Authorization", "Bearer "+testToken)
 	w := httptest.NewRecorder()
@@ -319,7 +319,7 @@ func TestApplyServerNoKey(t *testing.T) {
 
 func TestApplyServerNotFound(t *testing.T) {
 	e := newTestEnv(t)
-	e.handler = New(app.New(e.st).WithAuth(ssh.Password("unused")), testToken, nil)
+	e.handler = New(app.New(e.st).WithAuth(ssh.Password("unused")), testToken, nil, nil)
 
 	w := e.do(http.MethodPost, applyPath(fmt.Sprint(int64(1<<62))), "")
 	wantError(t, w, http.StatusNotFound, "not found")

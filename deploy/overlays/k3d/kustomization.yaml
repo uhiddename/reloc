@@ -39,3 +39,13 @@ patches:
       - op: replace
         path: /spec/rules/0/host
         value: reloc.hiddename.test
+  # No Cloudflare in front of k3d: nothing would send the Access JWT.
+  - target:
+      kind: Deployment
+      name: relocd
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value:
+          name: RELOCD_CF_ACCESS
+          value: "0"

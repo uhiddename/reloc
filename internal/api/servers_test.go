@@ -92,7 +92,7 @@ func TestListServersNoSecrets(t *testing.T) {
 }
 
 func TestListServersRequiresToken(t *testing.T) {
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, serversPath, nil))
 	wantError(t, w, http.StatusUnauthorized, "unauthorized")
@@ -101,7 +101,7 @@ func TestListServersRequiresToken(t *testing.T) {
 // A database error reaches the log, not the caller.
 func TestListServersUnavailable(t *testing.T) {
 	logs := captureLog(t)
-	h := New(unreachableApp(t), testToken, nil)
+	h := New(unreachableApp(t), testToken, nil, nil)
 
 	r := httptest.NewRequest(http.MethodGet, serversPath, nil)
 	r.Header.Set("Authorization", "Bearer "+testToken)

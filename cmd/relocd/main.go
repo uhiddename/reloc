@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/uhiddename/reloc/internal/api"
 	"github.com/uhiddename/reloc/internal/app"
@@ -85,7 +86,7 @@ func run(ctx context.Context) error {
 
 	srv := &http.Server{
 		Addr:              cfg.Addr.String(),
-		Handler:           api.New(a, cfg.Token, web.Handler()),
+		Handler:           api.New(a, cfg.Token, newCFAccessVerifier(ctx, cfg.CFAccess), web.Handler()),
 		ReadHeaderTimeout: readHeaderTimeout,
 	}
 
@@ -120,4 +121,17 @@ func newApp(st *store.Store, sshKeyPath string) (*app.App, error) {
 		return nil, err
 	}
 	return app.New(st).WithAuth(auth), nil
+}
+
+// newCFAccessVerifier returns the checker of Cloudflare Access JWTs, or nil if
+// the check is off. The keys are fetched from the team domain on first use
+// and again when a token names a key not seen yet (Cloudflare rotates them).
+// Every fetch uses ctx, so it must live as long as the server.
+func newCFAccessVerifier(ctx context.Context, c *config.CFAccess) *oidc.IDTokenVerifier {
+	if c == nil {
+		slog.Warn("cloudflare access is off")
+		return nil
+	}
+	keys := oidc.NewRemoteKeySet(ctx, c.Issuer+"/cdn-cgi/access/certs")
+	return oidc.NewVerifier(c.Issuer, keys, &oidc.Config{ClientID: c.Audience})
 }

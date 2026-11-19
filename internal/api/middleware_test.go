@@ -11,7 +11,7 @@ import (
 
 func TestToken(t *testing.T) {
 	// a nil app: a request that gets past the check panics in the handler
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 
 	tests := []struct {
 		name   string
@@ -44,7 +44,7 @@ func TestToken(t *testing.T) {
 func TestUnknownRouteRequiresToken(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/no-such-route", nil)
 	w := httptest.NewRecorder()
-	New(nil, testToken, nil).ServeHTTP(w, r)
+	New(nil, testToken, nil, nil).ServeHTTP(w, r)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("status = %d, want %d", w.Code, http.StatusUnauthorized)
 	}
@@ -56,7 +56,7 @@ func TestLogRequests(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	defer slog.SetDefault(prev)
 
-	h := New(nil, testToken, nil)
+	h := New(nil, testToken, nil, nil)
 	r := httptest.NewRequest(http.MethodGet, clientsPath(1)+"?secret=query", nil)
 	r.Header.Set("Authorization", "Bearer "+testToken+"-wrong")
 	h.ServeHTTP(httptest.NewRecorder(), r)

@@ -38,6 +38,8 @@ export PGPASSFILE="$HOME/.config/reloc/pgpass"
 export RELOCD_ADDR='127.0.0.1:8080'
 export RELOCD_TOKEN_FILE="$HOME/.config/reloc/relocd_token"
 export RELOCD_SSH_KEY_FILE="$HOME/.config/reloc/relocd_ssh_key"
+# no Cloudflare in front of a local relocd
+export RELOCD_CF_ACCESS='0'
 
 # compose.yaml
 # Host ports of the local stack.

@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/coreos/go-oidc/v3/oidc"
 )
 
 func requireToken(token string, next http.Handler) http.Handler {
@@ -104,5 +106,36 @@ func recoverPanics(next http.Handler) http.Handler {
 			writeJSON(w, http.StatusInternalServerError, errorResponse{"internal error"})
 		}()
 		next.ServeHTTP(tw, r)
+	})
+}
+
+// cfAccessHeader is where Cloudflare Access puts its JWT on every request it
+// lets through.
+const cfAccessHeader = "Cf-Access-Jwt-Assertion"
+
+// requireCFAccess lets a request through only with a valid Cloudflare Access
+// JWT: signed by the team's keys, issued by the team, for this application,
+// not expired. v checks all of that. A request without one came around
+// Access, straight to the server.
+//
+// A nil v means the check is off (no Cloudflare in front, as in k3d), and
+// next is returned as it is.
+func requireCFAccess(v *oidc.IDTokenVerifier, next http.Handler) http.Handler {
+	if v == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := r.Header.Get(cfAccessHeader)
+		if raw == "" {
+			writeJSON(w, http.StatusUnauthorized, errorResponse{"unauthorized"})
+			return
+		}
+		if _, err := v.Verify(r.Context(), raw); err != nil {
+			// the reason only: the token itself is a credential
+			slog.Warn("cf access: token rejected", "err", err)
+			writeJSON(w, http.StatusUnauthorized, errorResponse{"unauthorized"})
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
