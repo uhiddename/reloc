@@ -1,0 +1,46 @@
+#!/usr/sbin/nft -f
+# Managed by Ansible.
+#
+# The firewall of the server itself: its own ports, like ssh, the k3s API
+# (6443) and the kubelet (10250). Hetzner's firewall closes them too; this
+# is the second layer, should a rule there ever break.
+#
+# Only this table, replaced as a whole: declare it (so that deleting never
+# fails), delete it, write it anew, all in one transaction. Nothing here
+# flushes the whole ruleset, which would take the rules of k3s with it.
+#
+# Traffic to pods (https to Traefik) is DNATed and goes through forward,
+# which k3s owns; this table doesn't touch forward or output.
+table inet host
+delete table inet host
+
+table inet host {
+	chain input {
+		type filter hook input priority filter; policy drop;
+
+		# answers to connections the server opened itself
+		ct state established,related accept
+		ct state invalid drop
+
+		iifname "lo" accept
+
+		# pods to the server: the k3s API, the kubelet, DNS
+		iifname { "cni0", "flannel.1" } accept
+
+		# ping; ICMPv6 also carries IPv6 neighbor discovery, without
+		# which IPv6 stops working
+		meta l4proto { icmp, ipv6-icmp } accept
+
+		# the address from Hetzner's DHCP, should a renewal come back
+		# as a new connection
+		udp sport 67 udp dport 68 accept
+		udp sport 547 udp dport 546 accept
+
+		tcp dport 22 accept
+
+		# https reaches Traefik through forward, not here; accepted
+		# anyway in case a path ever delivers it to the server itself
+		# (Hetzner lets only Cloudflare reach 443)
+		tcp dport 443 accept
+	}
+}

@@ -1,0 +1,23 @@
+# Managed by Ansible.
+#
+# Loads /etc/host-firewall.nft, like Debian's nftables.service loads
+# /etc/nftables.conf, but stopping it removes only this table: Debian's
+# unit flushes the whole ruleset, rules of k3s included.
+[Unit]
+Description=Host firewall (nftables table inet host)
+# Before the network comes up: no moment with the network and no rules.
+Wants=network-pre.target
+Before=network-pre.target shutdown.target
+Conflicts=shutdown.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+StandardInput=null
+ExecStart=/usr/sbin/nft --file /etc/host-firewall.nft
+ExecReload=/usr/sbin/nft --file /etc/host-firewall.nft
+ExecStop=/usr/sbin/nft delete table inet host
+
+[Install]
+WantedBy=sysinit.target

@@ -11,4 +11,5 @@
     - base
     - admin
     - sshd
+    - firewall
     - k3s
