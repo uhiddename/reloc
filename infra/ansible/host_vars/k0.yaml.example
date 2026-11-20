@@ -1,0 +1,3 @@
+ansible_user: your-name
+admin_user: your-name
+admin_ssh_public_key_file: your-path

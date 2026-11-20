@@ -4,7 +4,11 @@
 # nothing when the server is already in it.
 - name: Set up the k3s servers
   hosts: k3s
+  # Ansible logs in as admin_user and becomes root through sudo for
+  # every task; root itself can't log in (roles/sshd).
+  become: true
   roles:
     - base
+    - admin
     - sshd
     - k3s

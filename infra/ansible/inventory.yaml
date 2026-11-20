@@ -4,5 +4,4 @@ all:
   children:
     k3s:
       hosts:
-        k0:
-          ansible_user: root
+        k0: {}

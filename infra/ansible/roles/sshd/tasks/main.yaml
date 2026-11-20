@@ -3,8 +3,8 @@
 # option, and reads sshd_config.d/*.conf in name order, so 10- wins over
 # 50-cloud-init.conf that the image ships.
 - name: Allow only key logins
-  ansible.builtin.copy:
-    src: 10-hardening.conf
+  ansible.builtin.template:
+    src: 10-hardening.conf.j2
     dest: /etc/ssh/sshd_config.d/10-hardening.conf
     owner: root
     group: root
@@ -12,3 +12,13 @@
     # a broken config is never written: sshd checks it first
     validate: /usr/sbin/sshd -t -f %s
   notify: Reload sshd
+
+# PermitRootLogin no already refuses root; an empty key list makes sure
+# the old key opens nothing even if that line is ever lost.
+- name: Remove root's ssh keys
+  ansible.builtin.copy:
+    content: ""
+    dest: /root/.ssh/authorized_keys
+    owner: root
+    group: root
+    mode: "0600"

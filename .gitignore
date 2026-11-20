@@ -10,6 +10,7 @@
 *.tfstate.*
 *.tfplan
 /infra/terraform.tfvars
+/infra/ansible/host_vars/*.yaml
 # build output
 /reloc
 /relocd

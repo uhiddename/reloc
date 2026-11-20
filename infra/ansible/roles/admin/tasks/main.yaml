@@ -1,0 +1,50 @@
+# The person who runs the server: logs in over ssh with a key and becomes
+# root through sudo, with a password. So a stolen key alone is not root,
+# and every sudo is in the journal.
+#
+# The password is not here: it is set by hand once,
+#   ssh -t k0 passwd <admin_user>
+# so it is never in a file. The user module leaves a password alone when
+# none is given, so later runs don't undo it.
+# Both are personal and come from host_vars/<host>.yaml, which git ignores;
+# a fresh clone has only the .example next to it.
+- name: Check that the admin user and key are set
+  ansible.builtin.assert:
+    that:
+      - admin_user | default('') | length > 0
+      - admin_ssh_public_key_file | default('') | length > 0
+    fail_msg: >-
+      set admin_user and admin_ssh_public_key_file in
+      host_vars/{{ inventory_hostname }}.yaml, see its .example
+
+- name: Install sudo
+  ansible.builtin.apt:
+    name: sudo
+    state: present
+
+# Debian's /etc/sudoers lets the sudo group run anything, with the user's
+# own password.
+- name: Create the admin user
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: sudo
+    append: true
+    shell: /bin/bash
+
+- name: Create the admin's ssh directory
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/.ssh"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0700"
+
+# The whole file: a key added on the server by hand is removed on the
+# next run.
+- name: Allow the admin's ssh key
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.file', admin_ssh_public_key_file | expanduser) }}\n"
+    dest: "/home/{{ admin_user }}/.ssh/authorized_keys"
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
